@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #ffffff;
+  --bg-elev: #f9f6f4;
+  --ink: #2b1e19;
+  --muted: #705e55;
+  --line: rgba(43, 30, 25, 0.12);
+  --accent: #b86e47;
+  --info: #3b82f6;
+  --success: #5f8f72;
+}
+
+.dark {
+  --bg: #1e1410;
+  --bg-elev: #2b1e19;
+  --ink: #f5ebe6;
+  --muted: #e2c2b3;
+  --line: rgba(226, 194, 179, 0.14);
+  --accent: #9c6246;
+  --info: #3b82f6;
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at 90% -10%, rgba(184, 110, 71, 0.08), transparent 28rem),
+    var(--bg);
+  color: var(--ink);
+}
+
+body {
+  min-height: 100vh;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: #f5ebe6;
+  color: #2b1e19;
+}
+
+.prose-note h1,
+.prose-note h2,
+.prose-note h3 {
+  font-weight: 700;
+  margin: 0.6em 0 0.35em;
+}
+.prose-note ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+}
+.prose-note ol {
+  list-style: decimal;
+  padding-left: 1.2rem;
+}
+.prose-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(15, 23, 34, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.3rem;
+  font-size: 0.9em;
+}
+.dark .prose-note code {
+  background: rgba(255, 255, 255, 0.08);
+}
+.prose-note blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.8rem;
+  color: var(--muted);
+}
+.prose-note input[type="checkbox"] {
+  margin-right: 0.4rem;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 99px;
+}
