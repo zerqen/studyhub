@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { CornerDownRight, Plus, Trash2 } from "lucide-react";
 import { createSubtask, deleteSubtask, updateSubtask } from "@/actions/subtasks";
 import { subtaskProgress } from "@/lib/progress";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
-import { Input } from "../ui/field";
-import { useRouter } from "next/navigation";
 import { useToast } from "../ui/toast";
 import { ProgressBar } from "../ui/badge";
+import { Checkbox } from "./checkbox";
 
 type Node = {
   id: string;
@@ -19,104 +20,148 @@ type Node = {
 };
 
 export function SubtaskTree({ taskId, items }: { taskId: string; items: Node[] }) {
-  const router = useRouter();
-  const progress = subtaskProgress(items);
-  const roots = items.filter((i) => !i.parentId);
+  // Локальные переопределения статусов — отметка видна сразу
+  const [over, setOver] = useState<Record<string, string>>({});
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const nodes = items.filter((i) => !removed.has(i.id)).map((i) => ({ ...i, status: over[i.id] ?? i.status }));
+  const progress = subtaskProgress(nodes);
+  const roots = nodes.filter((i) => !i.parentId);
+  const done = nodes.filter((n) => n.status === "DONE").length;
 
   return (
-    <div className="space-y-3">
-      <div>
-        <div className="mb-1 flex justify-between text-sm">
-          <span>Подзадачи</span>
-          <span>{progress}%</span>
-        </div>
-        <ProgressBar value={progress} />
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="text-sm font-semibold">Подзадачи</h2>
+        {nodes.length ? (
+          <>
+            <span className="text-xs tabular-nums text-muted">
+              {done}/{nodes.length}
+            </span>
+            <ProgressBar value={progress} className="max-w-40" />
+          </>
+        ) : null}
       </div>
-      {roots.map((n) => (
-        <SubtaskNode key={n.id} node={n} items={items} taskId={taskId} />
-      ))}
-      <QuickAdd taskId={taskId} parentId={null} onDone={() => router.refresh()} />
+      <div className="space-y-0.5">
+        {roots.map((n) => (
+          <SubtaskNode
+            key={n.id}
+            node={n}
+            nodes={nodes}
+            taskId={taskId}
+            setStatus={(id, s) => setOver((o) => ({ ...o, [id]: s }))}
+            remove={(id) => setRemoved((r) => new Set(r).add(id))}
+          />
+        ))}
+      </div>
+      <QuickAdd taskId={taskId} parentId={null} />
     </div>
   );
 }
 
-function SubtaskNode({ node, items, taskId }: { node: Node; items: Node[]; taskId: string }) {
-  const children = items.filter((i) => i.parentId === node.id);
-  const router = useRouter();
+function SubtaskNode({
+  node,
+  nodes,
+  taskId,
+  setStatus,
+  remove,
+}: {
+  node: Node;
+  nodes: Node[];
+  taskId: string;
+  setStatus: (id: string, status: string) => void;
+  remove: (id: string) => void;
+}) {
+  const children = nodes.filter((i) => i.parentId === node.id);
   const toast = useToast();
   const [adding, setAdding] = useState(false);
+  const isDone = node.status === "DONE";
 
   return (
-    <div className="rounded-xl border border-black/5 p-3 dark:border-white/10">
-      <div className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          checked={node.status === "DONE"}
+    <div>
+      <div className="group flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-subtle/60">
+        <Checkbox
+          size="sm"
+          checked={isDone}
+          className="mt-0.5"
           onChange={async () => {
-            const res = await updateSubtask(node.id, {
-              taskId,
-              title: node.title,
-              status: node.status === "DONE" ? "PLANNED" : "DONE",
-            });
-            if (!res.ok) toast.push(res.error, "err");
-            router.refresh();
+            const next = isDone ? "PLANNED" : "DONE";
+            setStatus(node.id, next);
+            const res = await updateSubtask(node.id, { taskId, title: node.title, status: next });
+            if (!res.ok) {
+              toast.push(res.error, "err");
+              setStatus(node.id, node.status);
+            }
           }}
         />
         <div className="min-w-0 flex-1">
-          <div className={node.status === "DONE" ? "text-[var(--muted)] line-through" : "font-medium"}>{node.title}</div>
-          {node.note ? <div className="text-xs text-[var(--muted)]">{node.note}</div> : null}
+          <div className={cn("text-sm", isDone && "text-muted line-through")}>{node.title}</div>
+          {node.note ? <div className="text-xs text-muted">{node.note}</div> : null}
         </div>
-        <button className="text-xs underline" onClick={() => setAdding((v) => !v)}>
-          + подзадача
-        </button>
-        <button
-          className="text-xs text-rose-600"
-          onClick={async () => {
-            await deleteSubtask(node.id);
-            router.refresh();
-          }}
-        >
-          удалить
-        </button>
+        <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+          <button className="rounded p-1 text-muted hover:bg-subtle hover:text-fg" onClick={() => setAdding((v) => !v)} aria-label="Добавить вложенную">
+            <CornerDownRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            className="rounded p-1 text-muted hover:bg-danger/10 hover:text-danger"
+            aria-label="Удалить"
+            onClick={async () => {
+              remove(node.id);
+              const r = await deleteSubtask(node.id);
+              if (!r.ok) toast.push(r.error, "err");
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
-      {adding ? <QuickAdd taskId={taskId} parentId={node.id} onDone={() => { setAdding(false); router.refresh(); }} /> : null}
-      {children.length ? (
-        <div className="ml-5 mt-2 space-y-2 border-l border-black/10 pl-3 dark:border-white/10">
+      {children.length || adding ? (
+        <div className="ml-[17px] border-l border-line pl-2">
           {children.map((c) => (
-            <SubtaskNode key={c.id} node={c} items={items} taskId={taskId} />
+            <SubtaskNode key={c.id} node={c} nodes={nodes} taskId={taskId} setStatus={setStatus} remove={remove} />
           ))}
+          {adding ? <QuickAdd taskId={taskId} parentId={node.id} onDone={() => setAdding(false)} autoFocus /> : null}
         </div>
       ) : null}
     </div>
   );
 }
 
-function QuickAdd({
-  taskId,
-  parentId,
-  onDone,
-}: {
-  taskId: string;
-  parentId: string | null;
-  onDone: () => void;
-}) {
+function QuickAdd({ taskId, parentId, onDone, autoFocus }: { taskId: string; parentId: string | null; onDone?: () => void; autoFocus?: boolean }) {
   const [title, setTitle] = useState("");
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   return (
     <form
-      className="mt-2 flex gap-2"
+      className="mt-1 flex items-center gap-2 px-2"
       onSubmit={async (e) => {
         e.preventDefault();
+        if (!title.trim()) return;
+        setBusy(true);
         const res = await createSubtask({ taskId, parentId, title });
+        setBusy(false);
         if (!res.ok) toast.push(res.error, "err");
         else {
           setTitle("");
-          onDone();
+          onDone?.();
         }
       }}
     >
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Новая подзадача" required />
-      <Button type="submit">Добавить</Button>
+      <Plus className="h-4 w-4 shrink-0 text-muted" />
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={parentId ? "Вложенная подзадача" : "Добавить подзадачу"}
+        autoFocus={autoFocus}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onDone?.();
+        }}
+        className="h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
+      />
+      {title.trim() ? (
+        <Button type="submit" size="sm" loading={busy}>
+          Добавить
+        </Button>
+      ) : null}
     </form>
   );
 }

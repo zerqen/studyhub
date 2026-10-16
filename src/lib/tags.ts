@@ -1,16 +1,10 @@
 import { prisma } from "./prisma";
 
 export async function syncTags(userId: string, names: string[] | undefined) {
-  if (!names) return [] as { id: string }[];
+  if (!names?.length) return [] as { id: string; name: string }[];
   const clean = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
-  const tags = [];
-  for (const name of clean) {
-    const tag = await prisma.tag.upsert({
-      where: { userId_name: { userId, name } },
-      update: {},
-      create: { userId, name },
-    });
-    tags.push(tag);
-  }
-  return tags;
+  if (!clean.length) return [];
+  // Два запроса вместо одного upsert на каждый тег
+  await prisma.tag.createMany({ data: clean.map((name) => ({ userId, name })), skipDuplicates: true });
+  return prisma.tag.findMany({ where: { userId, name: { in: clean } }, select: { id: true, name: true } });
 }

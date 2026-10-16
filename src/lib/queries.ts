@@ -1,52 +1,68 @@
 import { prisma } from "./prisma";
 import { subjectProgress, subtaskProgress } from "./progress";
-import { refreshDeadlineNotifications } from "./notify";
 import { startOfDay, addDays, endOfDay } from "date-fns";
 
 export async function getDashboard(userId: string) {
-  await refreshDeadlineNotifications(userId);
   const today = startOfDay(new Date());
-  const [subjects, tasks, questions, notes, notifications] = await Promise.all([
+  const tomorrow = addDays(today, 1);
+
+  // Только нужные поля — раньше сюда тянулись все вопросы и задачи целиком
+  const [subjects, tasks, questionCounts, notes] = await Promise.all([
     prisma.subject.findMany({
       where: { userId, archived: false },
-      include: { questions: true, tasks: true },
-      orderBy: { examDate: "asc" },
+      select: {
+        id: true,
+        name: true,
+        emoji: true,
+        color: true,
+        examDate: true,
+        type: true,
+        questions: { select: { status: true } },
+        tasks: { select: { status: true } },
+      },
+      orderBy: [{ examDate: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
     }),
     prisma.task.findMany({
       where: { userId, status: { not: "CANCELLED" } },
-      include: { subject: true, subtasks: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        dueTime: true,
+        subject: { select: { name: true, color: true } },
+      },
       orderBy: { dueDate: "asc" },
     }),
-    prisma.question.findMany({ where: { userId } }),
+    prisma.question.groupBy({ by: ["status"], where: { userId }, _count: { _all: true } }),
     prisma.note.findMany({
       where: { userId, pinned: true },
+      select: { id: true, title: true, content: true, color: true },
       orderBy: { updatedAt: "desc" },
-      take: 6,
-    }),
-    prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 12,
+      take: 4,
     }),
   ]);
 
-  const overdue = tasks.filter(
-    (t) => t.dueDate && t.dueDate < today && t.status !== "DONE",
-  );
-  const todayTasks = tasks.filter(
-    (t) => t.dueDate && t.dueDate >= today && t.dueDate < addDays(today, 1) && t.status !== "DONE",
-  );
-  const upcoming = tasks.filter(
-    (t) => t.dueDate && t.dueDate >= addDays(today, 1) && t.status !== "DONE",
-  ).slice(0, 8);
-  const exams = subjects
-    .filter((s) => s.examDate)
-    .sort((a, b) => (a.examDate!.getTime() - b.examDate!.getTime()))
-    .slice(0, 6);
+  const open = tasks.filter((t) => t.status !== "DONE");
+  const overdue = open.filter((t) => t.dueDate && t.dueDate < today);
+  const todayTasks = open.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate < tomorrow);
+  const upcoming = open.filter((t) => t.dueDate && t.dueDate >= tomorrow).slice(0, 6);
+  const exams = subjects.filter((s) => s.examDate && s.examDate >= today).slice(0, 4);
+
+  const totalQuestions = questionCounts.reduce((a, c) => a + c._count._all, 0);
+  const learnedQuestions = questionCounts.find((c) => c.status === "LEARNED")?._count._all ?? 0;
+  const reviewQuestions = questionCounts.find((c) => c.status === "REVIEW")?._count._all ?? 0;
 
   return {
     subjects: subjects.map((s) => ({
-      ...s,
+      id: s.id,
+      name: s.name,
+      emoji: s.emoji,
+      color: s.color,
+      examDate: s.examDate,
+      questionsTotal: s.questions.length,
+      questionsLeft: s.questions.filter((q) => q.status !== "LEARNED").length,
       progress: subjectProgress({ questions: s.questions, tasks: s.tasks }),
     })),
     overdue,
@@ -54,9 +70,9 @@ export async function getDashboard(userId: string) {
     upcoming,
     exams,
     notes,
-    notifications,
-    learnedQuestions: questions.filter((q) => q.status === "LEARNED").length,
-    totalQuestions: questions.length,
+    learnedQuestions,
+    reviewQuestions,
+    totalQuestions,
     doneTasks: tasks.filter((t) => t.status === "DONE").length,
     totalTasks: tasks.length,
   };
@@ -69,14 +85,23 @@ export async function getCalendarData(userId: string, from: Date, to: Date) {
         userId,
         OR: [{ dueDate: { gte: from, lte: to } }, { startDate: { gte: from, lte: to } }],
       },
-      include: { subject: true },
+      select: {
+        id: true,
+        title: true,
+        dueDate: true,
+        priority: true,
+        status: true,
+        subjectId: true,
+        subject: { select: { id: true, name: true, color: true } },
+      },
     }),
     prisma.subject.findMany({
       where: { userId, examDate: { gte: from, lte: to } },
+      select: { id: true, name: true, color: true, examDate: true },
     }),
     prisma.calendarEvent.findMany({
       where: { userId, startAt: { gte: from, lte: to } },
-      include: { subject: true },
+      select: { id: true, title: true, startAt: true, color: true, subject: { select: { color: true } } },
     }),
   ]);
   return { tasks, subjects, events };

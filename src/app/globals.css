@@ -2,83 +2,134 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Цвета хранятся как RGB-каналы, чтобы Tailwind мог делать прозрачность: bg-accent/10 */
 :root {
-  --bg: #ffffff;
-  --bg-elev: #f9f6f4;
-  --ink: #2b1e19;
-  --muted: #705e55;
-  --line: rgba(43, 30, 25, 0.12);
-  --accent: #b86e47;
-  --info: #3b82f6;
-  --success: #5f8f72;
+  --bg: 248 248 250;
+  --surface: 255 255 255;
+  --subtle: 243 244 246;
+  --line: 228 228 234;
+  --fg: 17 17 27;
+  --muted: 107 109 124;
+  --accent: 79 70 229;
+  --accent-fg: 255 255 255;
+  --accent-soft: 238 237 254;
+  --success: 22 163 74;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  color-scheme: light;
 }
 
 .dark {
-  --bg: #1e1410;
-  --bg-elev: #2b1e19;
-  --ink: #f5ebe6;
-  --muted: #e2c2b3;
-  --line: rgba(226, 194, 179, 0.14);
-  --accent: #9c6246;
-  --info: #3b82f6;
+  --bg: 13 13 18;
+  --surface: 22 22 29;
+  --subtle: 32 32 41;
+  --line: 44 44 56;
+  --fg: 236 236 241;
+  --muted: 150 151 166;
+  --accent: 129 120 255;
+  --accent-fg: 255 255 255;
+  --accent-soft: 37 35 70;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  color-scheme: dark;
 }
 
-html,
-body {
-  background:
-    radial-gradient(circle at 90% -10%, rgba(184, 110, 71, 0.08), transparent 28rem),
-    var(--bg);
-  color: var(--ink);
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-bg text-fg antialiased;
+    min-height: 100dvh;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    @apply bg-accent/20;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/40 ring-offset-0;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  input[type="checkbox"] {
+    accent-color: rgb(var(--accent));
+  }
 }
 
-body {
-  min-height: 100vh;
-  letter-spacing: -0.01em;
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .card-hover {
+    @apply transition-colors duration-150 hover:border-fg/20;
+  }
+  .label-xs {
+    @apply text-xs font-medium uppercase tracking-wide text-muted;
+  }
+  .skeleton {
+    @apply animate-[pulse_1.6s_ease-in-out_infinite] rounded-lg bg-subtle;
+  }
 }
 
-::selection {
-  background: #f5ebe6;
-  color: #2b1e19;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
 
-.prose-note h1,
-.prose-note h2,
+/* Markdown внутри заметок */
+.prose-note {
+  @apply text-[15px] leading-relaxed;
+}
+.prose-note > * + * {
+  margin-top: 0.6em;
+}
+.prose-note h1 {
+  @apply text-xl font-semibold;
+}
+.prose-note h2 {
+  @apply text-lg font-semibold;
+}
 .prose-note h3 {
-  font-weight: 700;
-  margin: 0.6em 0 0.35em;
+  @apply font-semibold;
 }
 .prose-note ul {
   list-style: disc;
-  padding-left: 1.2rem;
+  padding-left: 1.25rem;
 }
 .prose-note ol {
   list-style: decimal;
-  padding-left: 1.2rem;
+  padding-left: 1.25rem;
+}
+.prose-note a {
+  @apply text-accent underline underline-offset-2;
 }
 .prose-note code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background: rgba(15, 23, 34, 0.08);
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.3rem;
-  font-size: 0.9em;
+  @apply rounded bg-subtle px-1 py-0.5 font-mono text-[0.9em];
 }
-.dark .prose-note code {
-  background: rgba(255, 255, 255, 0.08);
+.prose-note pre {
+  @apply overflow-x-auto rounded-xl bg-subtle p-3;
+}
+.prose-note pre code {
+  @apply bg-transparent p-0;
 }
 .prose-note blockquote {
-  border-left: 3px solid var(--accent);
-  padding-left: 0.8rem;
-  color: var(--muted);
+  @apply border-l-2 border-accent pl-3 text-muted;
 }
 .prose-note input[type="checkbox"] {
   margin-right: 0.4rem;
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.scrollbar-none {
+  scrollbar-width: none;
 }
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.35);
-  border-radius: 99px;
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

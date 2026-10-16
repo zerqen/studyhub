@@ -1,56 +1,39 @@
 import { cn } from "@/lib/utils";
-import { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { forwardRef, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 export function Field({
   label,
   error,
+  hint,
   children,
+  className,
 }: {
   label: string;
   error?: string;
+  hint?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-ink-800 dark:text-ink-100">{label}</span>
+    <label className={cn("block space-y-1.5", className)}>
+      <span className="text-[13px] font-medium text-fg/80">{label}</span>
       {children}
-      {error ? <span className="text-xs text-rose-600">{error}</span> : null}
+      {error ? <span className="block text-xs text-danger">{error}</span> : hint ? <span className="block text-xs text-muted">{hint}</span> : null}
     </label>
   );
 }
 
-export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink-900 outline-none ring-info/40 focus:ring-2 dark:border-white/10 dark:bg-ink-900 dark:text-ink-50",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+const base =
+  "w-full rounded-xl border border-line bg-surface px-3 text-sm text-fg outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-muted/70 hover:border-fg/20 focus:border-accent/60 focus:ring-4 focus:ring-accent/10 disabled:opacity-60";
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={cn(
-        "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink-900 outline-none ring-info/40 focus:ring-2 dark:border-white/10 dark:bg-ink-900 dark:text-ink-50",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...props }, ref) {
+  return <input ref={ref} className={cn(base, "h-9", className)} {...props} />;
+});
 
-export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(
-        "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink-900 outline-none ring-info/40 focus:ring-2 dark:border-white/10 dark:bg-ink-900 dark:text-ink-50",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
+  return <textarea ref={ref} className={cn(base, "py-2 leading-relaxed", className)} {...props} />;
+});
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select({ className, ...props }, ref) {
+  return <select ref={ref} className={cn(base, "h-9 cursor-pointer pr-8", className)} {...props} />;
+});

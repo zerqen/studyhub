@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/constants";
 import { createTask, updateTask } from "@/actions/tasks";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea } from "../ui/field";
 import { useToast } from "../ui/toast";
@@ -33,10 +34,12 @@ export function TaskForm({
     tags: initial?.tags ?? "",
     questionId: initial?.questionId ?? "",
   });
+  const [more, setMore] = useState(Boolean(id && (initial?.startDate || initial?.tags || initial?.questionId)));
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-  const router = useRouter();
+  const set = (patch: Partial<typeof v>) => setV((s) => ({ ...s, ...patch }));
+  const relevantQuestions = questions.filter((q) => !v.subjectId || q.subjectId === v.subjectId);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,10 +50,7 @@ export function TaskForm({
       startDate: v.startDate || null,
       dueDate: v.dueDate || null,
       dueTime: v.dueTime || null,
-      tags: v.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
+      tags: v.tags.split(",").map((t) => t.trim()).filter(Boolean),
       questionId: v.questionId || null,
     };
     const res = id ? await updateTask(id, payload) : await createTask(payload);
@@ -61,53 +61,29 @@ export function TaskForm({
     }
     toast.push(id ? "Задача обновлена" : "Задача создана");
     onDone?.();
-    router.refresh();
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
-      <Field label="Название" error={err}>
-        <Input value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} required />
-      </Field>
-      <Field label="Связанный вопрос (необязательно)">
-        <Select value={v.questionId} onChange={(e) => setV({ ...v, questionId: e.target.value })}>
-          <option value="">Без вопроса</option>
-          {questions
-            .filter((question) => !v.subjectId || question.subjectId === v.subjectId)
-            .map((question) => (
-              <option key={question.id} value={question.id}>
-                {question.text.length > 90 ? `${question.text.slice(0, 90)}…` : question.text}
+    <form onSubmit={submit} className="space-y-4">
+      <div>
+        <Input value={v.title} onChange={(e) => set({ title: e.target.value })} required autoFocus placeholder="Что нужно сделать?" aria-label="Название" className="h-10 text-[15px]" />
+        {err ? <p className="mt-1 text-xs text-danger">{err}</p> : null}
+      </div>
+      <Textarea rows={2} value={v.description} onChange={(e) => set({ description: e.target.value })} placeholder="Детали (необязательно)" aria-label="Описание" />
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Предмет">
+          <Select value={v.subjectId} onChange={(e) => set({ subjectId: e.target.value, questionId: "" })}>
+            <option value="">Без предмета</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
-        </Select>
-      </Field>
-      <Field label="Описание">
-        <Textarea rows={3} value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} />
-      </Field>
-      <Field label="Предмет (необязательно)">
-        <Select value={v.subjectId} onChange={(e) => setV({ ...v, subjectId: e.target.value })}>
-          <option value="">Без предмета</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Начало">
-          <Input type="date" value={v.startDate} onChange={(e) => setV({ ...v, startDate: e.target.value })} />
-        </Field>
-        <Field label="Дедлайн">
-          <Input type="date" value={v.dueDate} onChange={(e) => setV({ ...v, dueDate: e.target.value })} />
-        </Field>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Время">
-          <Input type="time" value={v.dueTime} onChange={(e) => setV({ ...v, dueTime: e.target.value })} />
+          </Select>
         </Field>
         <Field label="Приоритет">
-          <Select value={v.priority} onChange={(e) => setV({ ...v, priority: e.target.value })}>
+          <Select value={v.priority} onChange={(e) => set({ priority: e.target.value })}>
             {TASK_PRIORITIES.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
@@ -115,21 +91,53 @@ export function TaskForm({
             ))}
           </Select>
         </Field>
-        <Field label="Статус">
-          <Select value={v.status} onChange={(e) => setV({ ...v, status: e.target.value })}>
-            {TASK_STATUSES.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
+        <Field label="Срок">
+          <Input type="date" value={v.dueDate} onChange={(e) => set({ dueDate: e.target.value })} />
+        </Field>
+        <Field label="Время">
+          <Input type="time" value={v.dueTime} onChange={(e) => set({ dueTime: e.target.value })} />
         </Field>
       </div>
-      <Field label="Теги через запятую">
-        <Input value={v.tags} onChange={(e) => setV({ ...v, tags: e.target.value })} placeholder="сессия, деканат" />
-      </Field>
-      <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Сохранение…" : id ? "Сохранить" : "Создать задачу"}
+
+      <button type="button" className="flex items-center gap-1 text-[13px] font-medium text-muted hover:text-fg" onClick={() => setMore((m) => !m)}>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !more && "-rotate-90")} /> Дополнительно
+      </button>
+      {more ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Статус">
+              <Select value={v.status} onChange={(e) => set({ status: e.target.value })}>
+                {TASK_STATUSES.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Начало">
+              <Input type="date" value={v.startDate} onChange={(e) => set({ startDate: e.target.value })} />
+            </Field>
+          </div>
+          {relevantQuestions.length ? (
+            <Field label="Связанный вопрос">
+              <Select value={v.questionId} onChange={(e) => set({ questionId: e.target.value })}>
+                <option value="">Без вопроса</option>
+                {relevantQuestions.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.text.length > 80 ? `${q.text.slice(0, 80)}…` : q.text}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          <Field label="Теги" hint="Через запятую">
+            <Input value={v.tags} onChange={(e) => set({ tags: e.target.value })} placeholder="сессия, деканат" />
+          </Field>
+        </div>
+      ) : null}
+
+      <Button type="submit" loading={busy} className="w-full">
+        {id ? "Сохранить" : "Создать задачу"}
       </Button>
     </form>
   );

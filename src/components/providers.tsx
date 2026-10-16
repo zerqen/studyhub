@@ -6,8 +6,8 @@ import { ToastProvider } from "./ui/toast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <SessionProvider refetchOnWindowFocus={false}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem themes={["light", "dark"]} disableTransitionOnChange>
         <ToastProvider>{children}</ToastProvider>
       </ThemeProvider>
     </SessionProvider>

@@ -3,115 +3,224 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Calendar, Check, ChevronLeft, Flag, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { deleteTask, toggleTaskDone } from "@/actions/tasks";
+import { QUESTION_STATUSES, TASK_PRIORITIES, TASK_STATUSES, labelOf, priorityTone, questionStatusTone, taskStatusTone } from "@/lib/constants";
+import { cn, formatDate, isOverdue } from "@/lib/utils";
 import { Button } from "../ui/button";
-import { Modal } from "../ui/modal";
+import { Badge } from "../ui/badge";
+import { ConfirmDialog, Modal } from "../ui/modal";
+import { Section } from "../ui/page";
+import { useToast } from "../ui/toast";
 import { TaskForm } from "./task-form";
 import { SubtaskTree } from "./subtask-tree";
 import { FileUploader } from "../files/uploader";
 import { FileGrid } from "../files/file-grid";
 import { CommentThread } from "../comments/comment-thread";
-import { useToast } from "../ui/toast";
-import { TASK_PRIORITIES, TASK_STATUSES, labelOf } from "@/lib/constants";
+
+type FileItem = { id: string; originalName: string; mimeType: string; size: number };
 
 type TaskDetailData = {
   id: string;
   title: string;
   description: string | null;
   subjectId: string | null;
-  subject: { name: string } | null;
+  subject: { id: string; name: string; color: string } | null;
   startDate: string | null;
   dueDate: string | null;
   dueTime: string | null;
   priority: string;
   status: string;
   subtasks: { id: string; parentId: string | null; title: string; status: string; note: string | null; dueDate: string | null }[];
-  attachments: { id: string; originalName: string; mimeType: string; size: number }[];
+  attachments: FileItem[];
   notes: { id: string; title: string; content: string; color: string }[];
   tags: { tag: { name: string } }[];
-  contextualComments: { id: string; content: string; createdAt: string; attachments?: { id: string; originalName: string; mimeType: string; size: number }[] }[];
+  contextualComments: { id: string; content: string; createdAt: string; attachments?: FileItem[] }[];
   questions: { id: string; text: string; status: string }[];
 };
 
-export function TaskDetail({ task, subjects, questions }: { task: TaskDetailData; subjects: { id: string; name: string }[]; questions: { id: string; text: string; subjectId: string }[] }) {
+export function TaskDetail({
+  task,
+  subjects,
+  questions,
+}: {
+  task: TaskDetailData;
+  subjects: { id: string; name: string }[];
+  questions: { id: string; text: string; subjectId: string }[];
+}) {
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const router = useRouter();
   const toast = useToast();
+  const st = status ?? task.status;
+  const done = st === "DONE";
+  const overdue = isOverdue(task.dueDate, st);
 
   async function complete() {
+    setStatus(done ? "PLANNED" : "DONE");
     const result = await toggleTaskDone(task.id);
-    if (!result.ok) toast.push(result.error, "err");
-    else router.refresh();
-  }
-
-  async function remove() {
-    if (!window.confirm("Удалить задачу и её подзадачи?")) return;
-    const result = await deleteTask(task.id);
-    if (!result.ok) toast.push(result.error, "err");
-    else router.push("/tasks");
+    if (!result.ok) {
+      toast.push(result.error, "err");
+      setStatus(null);
+    } else {
+      setStatus(null);
+      if (!done) toast.push("Задача выполнена");
+    }
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
-      <Link href="/tasks" className="text-sm text-[var(--muted)] hover:text-[var(--ink)]">← Все задачи</Link>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <main className="space-y-5">
-          <article className="rounded-[2rem] bg-[var(--bg-elev)] p-6 shadow-card sm:p-8">
-            <div className="mb-4 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-              <span className="rounded-full bg-[var(--accent)]/10 px-2.5 py-1">{labelOf(TASK_STATUSES, task.status)}</span>
-              <span className="rounded-full bg-black/5 px-2.5 py-1 dark:bg-white/10">{labelOf(TASK_PRIORITIES, task.priority)}</span>
-              {task.subject ? <span className="rounded-full bg-black/5 px-2.5 py-1 dark:bg-white/10">{task.subject.name}</span> : null}
+    <div className="mx-auto max-w-5xl">
+      <Link href="/tasks" className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+        <ChevronLeft className="h-4 w-4" /> Задачи
+      </Link>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="min-w-0 space-y-5">
+          <article className="card p-5 sm:p-6">
+            <div className="mb-3 flex flex-wrap items-center gap-1.5">
+              <Badge tone={taskStatusTone(st)} dot>
+                {labelOf(TASK_STATUSES, st)}
+              </Badge>
+              {task.subject ? (
+                <Link href={`/subjects/${task.subject.id}`} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-subtle px-2 text-xs font-medium text-muted hover:text-fg">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: task.subject.color }} />
+                  {task.subject.name}
+                </Link>
+              ) : null}
+              {task.tags.map((t) => (
+                <Link key={t.tag.name} href={`/tasks?tag=${encodeURIComponent(t.tag.name)}`} className="text-xs text-muted hover:text-accent">
+                  #{t.tag.name}
+                </Link>
+              ))}
             </div>
-            <h1 className={`text-3xl font-semibold tracking-tight ${task.status === "DONE" ? "line-through opacity-60" : ""}`}>{task.title}</h1>
-            {task.description ? <p className="mt-5 whitespace-pre-wrap text-[var(--muted)]">{task.description}</p> : null}
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button onClick={() => void complete()}>{task.status === "DONE" ? "Вернуть в работу" : "Завершить"}</Button>
-              <Button variant="secondary" onClick={() => setEditing(true)}>Изменить параметры</Button>
-              <Button variant="danger" onClick={() => void remove()}>Удалить</Button>
+            <h1 className={cn("text-xl font-semibold leading-snug tracking-tight sm:text-2xl", done && "text-muted line-through")}>{task.title}</h1>
+            {task.description ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted">{task.description}</p> : null}
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button variant={done ? "secondary" : "primary"} onClick={() => void complete()}>
+                {done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                {done ? "Вернуть в работу" : "Выполнено"}
+              </Button>
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" /> Изменить
+              </Button>
+              <Button variant="danger-ghost" className="ml-auto" onClick={() => setDeleting(true)}>
+                <Trash2 className="h-4 w-4" /> Удалить
+              </Button>
             </div>
           </article>
-          <section className="rounded-[2rem] bg-[var(--bg-elev)] p-6 shadow-card">
+
+          <div className="card p-4 sm:p-5">
             <SubtaskTree taskId={task.id} items={task.subtasks} />
-          </section>
+          </div>
+
           <CommentThread taskId={task.id} comments={task.contextualComments} />
-        </main>
+        </div>
+
         <aside className="space-y-4">
-          <section className="rounded-3xl bg-[var(--bg-elev)] p-5 shadow-card">
-            <h2 className="font-semibold">Связанные вопросы</h2>
-            <div className="mt-3 space-y-2">
-              {task.questions.length ? task.questions.map((question) => (
-                <Link key={question.id} href={`/questions/${question.id}`} className="block rounded-2xl border border-black/5 p-3 text-sm hover:border-[var(--accent)]/40 dark:border-white/10">
-                  <div className="line-clamp-2">{question.text}</div>
-                  <div className="mt-1 text-xs text-[var(--muted)]">{question.status === "LEARNED" ? "Выучен" : question.status === "REVIEW" ? "Повторить" : "В процессе"}</div>
+          <Section>
+            <dl className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <dt className="flex items-center gap-2 text-muted">
+                  <Calendar className="h-4 w-4" /> Срок
+                </dt>
+                <dd className={cn("font-medium", overdue && "text-danger")}>
+                  {task.dueDate ? formatDate(task.dueDate, "d MMMM") : "—"}
+                  {task.dueTime ? `, ${task.dueTime}` : ""}
+                </dd>
+              </div>
+              {task.startDate ? (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="pl-6 text-muted">Начало</dt>
+                  <dd>{formatDate(task.startDate, "d MMMM")}</dd>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-2">
+                <dt className="flex items-center gap-2 text-muted">
+                  <Flag className="h-4 w-4" /> Приоритет
+                </dt>
+                <dd>
+                  <Badge tone={priorityTone(task.priority)}>{labelOf(TASK_PRIORITIES, task.priority)}</Badge>
+                </dd>
+              </div>
+            </dl>
+          </Section>
+
+          {task.questions.length ? (
+            <Section title="Вопросы" bodyClassName="p-1.5">
+              {task.questions.map((q) => (
+                <Link key={q.id} href={`/questions/${q.id}`} className="block rounded-xl px-2.5 py-2 transition-colors hover:bg-subtle">
+                  <div className="line-clamp-2 text-sm">{q.text}</div>
+                  <Badge tone={questionStatusTone(q.status)} className="mt-1">
+                    {labelOf(QUESTION_STATUSES, q.status)}
+                  </Badge>
                 </Link>
-              )) : <p className="text-sm text-[var(--muted)]">Вопросов пока нет.</p>}
-            </div>
-          </section>
-          <section className="rounded-3xl bg-[var(--bg-elev)] p-5 shadow-card">
-            <h2 className="font-semibold">Файлы задачи</h2>
-            <div className="mt-3"><FileUploader parent={{ taskId: task.id }} compact /></div>
-            <div className="mt-4">{task.attachments.length ? <FileGrid files={task.attachments} /> : <p className="text-sm text-[var(--muted)]">Файлов пока нет.</p>}</div>
-          </section>
-          {task.dueDate ? <section className="rounded-3xl bg-[var(--bg-elev)] p-5 shadow-card"><div className="text-xs text-[var(--muted)]">Дедлайн</div><div className="mt-1 font-medium">{task.dueDate}</div></section> : null}
-          <section className="rounded-3xl bg-[var(--bg-elev)] p-5 shadow-card">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold">Заметки</h2>
-              <Link href={`/notes?taskId=${task.id}`} className="text-xs text-[var(--accent)]">Новая заметка</Link>
-            </div>
-            <div className="mt-3 space-y-2">
-              {task.notes.length ? task.notes.map((note) => (
-                <Link key={note.id} href={`/notes?open=${note.id}`} className="block rounded-2xl p-3 text-sm transition hover:opacity-80" style={{ background: note.color }}>
-                  <div className="font-medium text-ink-950">{note.title}</div>
-                  {note.content ? <div className="mt-1 line-clamp-2 text-xs text-ink-700/70">{note.content}</div> : null}
+              ))}
+            </Section>
+          ) : null}
+
+          <Section
+            title="Заметки"
+            action={
+              <Link href={`/notes?taskId=${task.id}`} className="text-muted hover:text-fg" aria-label="Новая заметка">
+                <Plus className="h-4 w-4" />
+              </Link>
+            }
+            bodyClassName="p-1.5"
+          >
+            {task.notes.length ? (
+              task.notes.map((note) => (
+                <Link key={note.id} href={`/notes?open=${note.id}`} className="flex gap-2.5 rounded-xl px-2.5 py-2 transition-colors hover:bg-subtle">
+                  <span className="mt-1 h-3 w-1 shrink-0 rounded-full" style={{ background: note.color }} />
+                  <span className="min-w-0 truncate text-sm">{note.title}</span>
                 </Link>
-              )) : <p className="text-sm text-[var(--muted)]">Заметок пока нет.</p>}
-            </div>
-          </section>
+              ))
+            ) : (
+              <p className="px-2.5 py-2 text-sm text-muted">Заметок нет.</p>
+            )}
+          </Section>
+
+          <Section title="Файлы">
+            <FileUploader parent={{ taskId: task.id }} compact />
+            {task.attachments.length ? (
+              <div className="mt-3">
+                <FileGrid files={task.attachments} compact />
+              </div>
+            ) : null}
+          </Section>
         </aside>
       </div>
+
       <Modal open={editing} onClose={() => setEditing(false)} title="Изменить задачу">
-        <TaskForm id={task.id} subjects={subjects} questions={questions} initial={{ title: task.title, description: task.description ?? "", subjectId: task.subjectId ?? "", startDate: task.startDate ?? "", dueDate: task.dueDate ?? "", dueTime: task.dueTime ?? "", priority: task.priority, status: task.status, tags: task.tags.map((item) => item.tag.name).join(","), questionId: task.questions[0]?.id }} onDone={() => setEditing(false)} />
+        <TaskForm
+          id={task.id}
+          subjects={subjects}
+          questions={questions}
+          initial={{
+            title: task.title,
+            description: task.description ?? "",
+            subjectId: task.subjectId ?? "",
+            startDate: task.startDate?.slice(0, 10) ?? "",
+            dueDate: task.dueDate?.slice(0, 10) ?? "",
+            dueTime: task.dueTime ?? "",
+            priority: task.priority,
+            status: st,
+            tags: task.tags.map((item) => item.tag.name).join(", "),
+            questionId: task.questions[0]?.id,
+          }}
+          onDone={() => setEditing(false)}
+        />
       </Modal>
+      <ConfirmDialog
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title="Удалить задачу?"
+        text="Задача, её подзадачи и комментарии будут удалены."
+        onConfirm={async () => {
+          const result = await deleteTask(task.id);
+          if (!result.ok) toast.push(result.error, "err");
+          else router.push("/tasks");
+        }}
+      />
     </div>
   );
 }

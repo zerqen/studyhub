@@ -31,7 +31,7 @@ export async function changePassword(input: unknown): Promise<ActionResult> {
 
 export async function markNotificationsRead(): Promise<ActionResult> {
   return withUser(async (userId) => {
+    // Без перерисовки всего приложения: колокольчик обновляется локально
     await prisma.notification.updateMany({ where: { userId, read: false }, data: { read: true } });
-    refreshAll();
   });
 }

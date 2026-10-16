@@ -15,7 +15,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Файл не передан" }, { status: 400 });
   }
   try {
-    const saved = await saveUpload(file);
     const parent = {
       subjectId: (form.get("subjectId") as string) || null,
       taskId: (form.get("taskId") as string) || null,
@@ -27,6 +26,7 @@ export async function POST(req: Request) {
     };
     const isAvatar = form.get("avatar") === "1";
     if (isAvatar) {
+      const saved = await saveUpload(file);
       const row = await prisma.attachment.create({
         data: { ...saved, userId: session.user.id },
       });
@@ -56,6 +56,7 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json({ ok: false, error: "Объект для файла не найден" }, { status: 404 });
     }
+    const saved = await saveUpload(file);
     const row = await prisma.attachment.create({
       data: { ...saved, userId: session.user.id, ...parent },
     });

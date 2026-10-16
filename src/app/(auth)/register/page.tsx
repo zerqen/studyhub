@@ -18,6 +18,7 @@ export default function RegisterPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setErr(undefined);
     const res = await registerAction(v);
     if (!res.ok) {
       setErr(res.error);
@@ -25,32 +26,44 @@ export default function RegisterPage() {
       return;
     }
     await signIn("credentials", { email: v.email, password: v.password, redirect: false });
-    router.push("/");
+    router.replace("/");
     router.refresh();
   }
 
   return (
-    <AuthCard title="Регистрация" hint="Создай аккаунт и добавь первый предмет.">
-      <form onSubmit={submit} className="space-y-3">
-        <Field label="Имя" error={err}>
-          <Input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} required />
+    <AuthCard
+      title="Регистрация"
+      hint="Создай аккаунт и добавь первый предмет."
+      footer={
+        <p>
+          Уже есть аккаунт?{" "}
+          <Link className="font-medium text-accent hover:underline" href="/login">
+            Войти
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Имя">
+          <Input autoComplete="name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} required autoFocus />
         </Field>
         <Field label="Email">
-          <Input type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} required />
+          <Input type="email" autoComplete="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} required />
         </Field>
-        <Field label="Пароль">
-          <Input type="password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} required minLength={8} />
-        </Field>
-        <Field label="Повтор пароля">
-          <Input type="password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} required />
-        </Field>
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? "Создаём…" : "Создать аккаунт"}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Пароль">
+            <Input type="password" autoComplete="new-password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} required minLength={8} />
+          </Field>
+          <Field label="Повтор">
+            <Input type="password" autoComplete="new-password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} required />
+          </Field>
+        </div>
+        <p className="-mt-2 text-xs text-muted">Минимум 8 символов</p>
+        {err ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p> : null}
+        <Button type="submit" className="w-full" size="lg" loading={busy}>
+          Создать аккаунт
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm">
-        Уже есть аккаунт? <Link className="underline" href="/login">Войти</Link>
-      </p>
     </AuthCard>
   );
 }

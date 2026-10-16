@@ -21,41 +21,53 @@ function LoginForm() {
     setBusy(true);
     setErr(undefined);
     const res = await signIn("credentials", { email, password, redirect: false });
-    setBusy(false);
     if (res?.error) {
-      setErr("Неверный email или пароль");
+      setBusy(false);
+      setErr(res.error === "CredentialsSignin" ? "Неверный email или пароль" : res.error);
       return;
     }
-    router.push(params.get("callbackUrl") || "/");
+    router.replace(params.get("callbackUrl") || "/");
     router.refresh();
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
-      <Field label="Email" error={err}>
-        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+    <form onSubmit={submit} className="space-y-4">
+      <Field label="Email">
+        <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
       </Field>
       <Field label="Пароль">
-        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
       </Field>
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy ? "Входим…" : "Войти"}
+      {err ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p> : null}
+      <Button type="submit" className="w-full" size="lg" loading={busy}>
+        Войти
       </Button>
+      <div className="text-center">
+        <Link className="text-sm text-muted hover:text-fg" href="/forgot-password">
+          Забыли пароль?
+        </Link>
+      </div>
     </form>
   );
 }
 
 export default function LoginPage() {
   return (
-    <AuthCard title="Вход в StudyHub" hint="Готовься к сессии спокойно и по полочкам.">
+    <AuthCard
+      title="Вход"
+      hint="С возвращением! Продолжим подготовку."
+      footer={
+        <p>
+          Нет аккаунта?{" "}
+          <Link className="font-medium text-accent hover:underline" href="/register">
+            Зарегистрироваться
+          </Link>
+        </p>
+      }
+    >
       <Suspense>
         <LoginForm />
       </Suspense>
-      <p className="mt-4 text-center text-sm text-[var(--muted)]">
-        Нет аккаунта? <Link className="underline" href="/register">Регистрация</Link>
-        <br />
-        <Link className="underline" href="/forgot-password">Забыли пароль?</Link>
-      </p>
     </AuthCard>
   );
 }

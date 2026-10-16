@@ -9,20 +9,23 @@ import {
   format,
   isSameDay,
   isSameMonth,
+  startOfDay,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { TASK_PRIORITIES } from "@/lib/constants";
+import { CalendarPlus, ChevronLeft, ChevronRight, GraduationCap, Plus } from "lucide-react";
 import { isOverdue, cn } from "@/lib/utils";
 import { moveTaskDate } from "@/actions/tasks";
+import { createEvent } from "@/actions/events";
 import { Modal } from "../ui/modal";
 import { TaskForm } from "../tasks/task-form";
-import { createEvent } from "@/actions/events";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/field";
+import { Field, Input, Select } from "../ui/field";
+import { Segmented } from "../ui/page";
 import { useToast } from "../ui/toast";
 
 export type CalTask = {
@@ -35,13 +38,11 @@ export type CalTask = {
   subject: { id: string; name: string; color: string } | null;
 };
 export type CalExam = { id: string; name: string; color: string; examDate: string | null };
-export type CalEvent = {
-  id: string;
-  title: string;
-  startAt: string;
-  color: string | null;
-  subject: { color: string } | null;
-};
+export type CalEvent = { id: string; title: string; startAt: string; color: string | null; subject: { color: string } | null };
+
+type Item = { kind: "exam" | "task" | "event"; id: string; title: string; color: string; href?: string; done?: boolean; overdue?: boolean };
+
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 export function CalendarApp({
   tasks,
@@ -54,238 +55,292 @@ export function CalendarApp({
   events: CalEvent[];
   subjects: { id: string; name: string }[];
 }) {
-  const [cursor, setCursor] = useState(new Date());
-  const [view, setView] = useState<"month" | "week" | "day" | "list">("month");
-  const [filters, setFilters] = useState({ subject: "", priority: "", status: "", type: "all" });
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => startOfDay(new Date()));
+  const [view, setView] = useState<"month" | "week">("month");
+  const [subjectFilter, setSubjectFilter] = useState("");
   const [createOn, setCreateOn] = useState<string | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
   const [eventTitle, setEventTitle] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [moved, setMoved] = useState<Record<string, string>>({});
   const toast = useToast();
   const router = useRouter();
 
   const days = useMemo(() => {
-    if (view === "day") return [cursor];
     if (view === "week") {
       const s = startOfWeek(cursor, { weekStartsOn: 1 });
       return eachDayOfInterval({ start: s, end: endOfWeek(cursor, { weekStartsOn: 1 }) });
     }
-    const s = startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 });
-    const e = endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 });
-    return eachDayOfInterval({ start: s, end: e });
+    return eachDayOfInterval({
+      start: startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 }),
+      end: endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 }),
+    });
   }, [cursor, view]);
 
-  function itemsFor(day: Date) {
-    const taskItems = tasks.filter((t) => t.dueDate && isSameDay(new Date(t.dueDate), day));
-    const examItems = exams.filter((s) => s.examDate && isSameDay(new Date(s.examDate), day));
-    const eventItems = events.filter((e) => isSameDay(new Date(e.startAt), day));
-    return {
-      tasks: taskItems.filter((t) => {
-        if (filters.subject && t.subjectId !== filters.subject) return false;
-        if (filters.priority && t.priority !== filters.priority) return false;
-        if (filters.status && t.status !== filters.status) return false;
-        if (filters.type === "task" || filters.type === "exam" || filters.type === "event") {
-          return filters.type === "task";
-        }
-        return true;
-      }),
-      exams: filters.type === "all" || filters.type === "exam" ? examItems.filter((s) => !filters.subject || s.id === filters.subject) : [],
-      events: filters.type === "all" || filters.type === "event" ? eventItems : [],
+  // Раскладываем всё по дням один раз, а не фильтруем массивы для каждой ячейки
+  const byDay = useMemo(() => {
+    const map = new Map<string, Item[]>();
+    const add = (date: string | null, item: Item) => {
+      if (!date) return;
+      const key = format(new Date(date), "yyyy-MM-dd");
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
     };
-  }
+    for (const s of exams) {
+      if (subjectFilter && s.id !== subjectFilter) continue;
+      add(s.examDate, { kind: "exam", id: s.id, title: s.name, color: s.color, href: `/subjects/${s.id}` });
+    }
+    for (const t of tasks) {
+      if (subjectFilter && t.subjectId !== subjectFilter) continue;
+      if (t.status === "CANCELLED") continue;
+      const due = moved[t.id] ?? t.dueDate;
+      add(due, {
+        kind: "task",
+        id: t.id,
+        title: t.title,
+        color: t.subject?.color ?? "#94a3b8",
+        href: `/tasks/${t.id}`,
+        done: t.status === "DONE",
+        overdue: isOverdue(due, t.status),
+      });
+    }
+    if (!subjectFilter) for (const e of events) add(e.startAt, { kind: "event", id: e.id, title: e.title, color: e.color ?? e.subject?.color ?? "#6366f1" });
+    return map;
+  }, [tasks, exams, events, subjectFilter, moved]);
+
+  const itemsOf = (day: Date) => byDay.get(format(day, "yyyy-MM-dd")) ?? [];
+  const selectedItems = itemsOf(selected);
 
   async function onDrop(day: Date, taskId: string) {
-    const res = await moveTaskDate(taskId, format(day, "yyyy-MM-dd"));
-    if (!res.ok) toast.push(res.error, "err");
-    else {
-      toast.push("Задача перенесена");
-      router.refresh();
-    }
+    const date = format(day, "yyyy-MM-dd");
+    setMoved((m) => ({ ...m, [taskId]: `${date}T00:00:00` }));
+    const res = await moveTaskDate(taskId, date);
+    if (!res.ok) {
+      toast.push(res.error, "err");
+      setMoved((m) => {
+        const c = { ...m };
+        delete c[taskId];
+        return c;
+      });
+    } else toast.push("Задача перенесена");
+  }
+
+  function shift(dir: 1 | -1) {
+    setCursor((c) => (view === "month" ? addMonths(c, dir) : addDays(c, 7 * dir)));
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-auto text-2xl font-semibold">Календарь</h1>
-        {(["month", "week", "day", "list"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={cn("rounded-xl px-3 py-1.5 text-sm", view === v ? "bg-accent text-white" : "bg-black/5 dark:bg-white/10")}
-          >
-            {{ month: "Месяц", week: "Неделя", day: "День", list: "Список" }[v]}
-          </button>
-        ))}
-        <Button variant="secondary" onClick={() => setEventOpen(true)}>
-          Событие
+    <div>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <h1 className="mr-auto text-2xl font-semibold tracking-tight">Календарь</h1>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setEventDate(format(selected, "yyyy-MM-dd"));
+            setEventOpen(true);
+          }}
+        >
+          <CalendarPlus className="h-4 w-4" /> Событие
+        </Button>
+        <Button onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}>
+          <Plus className="h-4 w-4" /> Задача
         </Button>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="rounded-lg px-2 py-1 hover:bg-black/5" onClick={() => setCursor(view === "month" ? addMonths(cursor, -1) : addDays(cursor, view === "week" ? -7 : -1))}>
-          ←
-        </button>
-        <div className="min-w-40 text-center font-medium capitalize">
-          {format(cursor, view === "day" ? "d MMMM yyyy" : "LLLL yyyy", { locale: ru })}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="flex items-center">
+          <Button variant="ghost" size="icon-sm" onClick={() => shift(-1)} aria-label="Назад">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-36 text-center text-[15px] font-semibold capitalize">
+            {view === "month"
+              ? format(cursor, "LLLL yyyy", { locale: ru })
+              : `${format(days[0], "d MMM", { locale: ru })} – ${format(days[6], "d MMM", { locale: ru })}`}
+          </div>
+          <Button variant="ghost" size="icon-sm" onClick={() => shift(1)} aria-label="Вперёд">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-        <button
-          className="rounded-lg px-2 py-1 hover:bg-black/5"
-          onClick={() => setCursor(view === "month" ? addMonths(cursor, 1) : addDays(cursor, view === "week" ? 7 : 1))}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setCursor(new Date());
+            setSelected(startOfDay(new Date()));
+          }}
         >
-          →
-        </button>
-        <button className="rounded-lg px-2 py-1 text-sm underline" onClick={() => setCursor(new Date())}>
           Сегодня
-        </button>
-        <select className="rounded-lg border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/10" value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })}>
-          <option value="">Все предметы</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select className="rounded-lg border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/10" value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}>
-          <option value="">Любой приоритет</option>
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <select className="rounded-lg border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/10" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-          <option value="">Любой статус</option>
-          <option value="PLANNED">Запланировано</option>
-          <option value="IN_PROGRESS">В процессе</option>
-          <option value="DONE">Выполнено</option>
-          <option value="OVERDUE">Просрочено</option>
-        </select>
-        <select className="rounded-lg border border-black/10 bg-transparent px-2 py-1 text-sm dark:border-white/10" value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
-          <option value="all">Все типы</option>
-          <option value="task">Задачи</option>
-          <option value="exam">Экзамены</option>
-          <option value="event">События</option>
-        </select>
+        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="h-8 w-auto min-w-36 text-[13px]">
+            <option value="">Все предметы</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              ["month", "Месяц"],
+              ["week", "Неделя"],
+            ]}
+          />
+        </div>
       </div>
 
-      {view === "list" ? (
-        <div className="space-y-2">
-          {days.flatMap((d) => {
-            const it = itemsFor(d);
-            const all = [
-              ...it.exams.map((e) => ({ kind: "exam", id: e.id, title: `Экзамен: ${e.name}`, color: e.color, href: `/subjects/${e.id}` })),
-              ...it.tasks.map((t) => ({
-                kind: "task",
-                id: t.id,
-                title: t.title,
-                color: t.subject?.color ?? "#64748b",
-                href: `/tasks?open=${t.id}`,
-                overdue: isOverdue(t.dueDate, t.status),
-              })),
-              ...it.events.map((e) => ({ kind: "event", id: e.id, title: e.title, color: e.color ?? e.subject?.color ?? "#9c6246", href: "/calendar" })),
-            ];
-            if (!all.length) return [];
-            return (
-              <div key={d.toISOString()} className="rounded-2xl bg-[var(--bg-elev)] p-4">
-                <div className="mb-2 font-medium capitalize">{format(d, "EEEE, d MMMM", { locale: ru })}</div>
-                {all.map((x) => (
-                  <button key={x.id} className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-black/5" onClick={() => router.push(x.href)}>
-                    <span className="h-2 w-2 rounded-full" style={{ background: x.color }} />
-                    <span className={"overdue" in x && x.overdue ? "text-rose-600" : ""}>{x.title}</span>
-                  </button>
-                ))}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="card overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-line">
+            {WEEKDAYS.map((d, i) => (
+              <div key={d} className={cn("py-2 text-center text-xs font-medium text-muted", i >= 5 && "text-muted/70")}>
+                {d}
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className={cn("grid gap-px overflow-hidden rounded-2xl bg-black/5 dark:bg-white/10", view === "month" ? "grid-cols-7" : view === "week" ? "grid-cols-7" : "grid-cols-1")}>
-          {view !== "day"
-            ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
-                <div key={d} className="bg-[var(--bg)] px-2 py-2 text-center text-xs text-[var(--muted)]">
-                  {d}
-                </div>
-              ))
-            : null}
-          {days.map((day) => {
-            const it = itemsFor(day);
-            return (
-              <div
-                key={day.toISOString()}
-                className={cn(
-                  "min-h-28 bg-[var(--bg-elev)] p-2",
-                  view === "month" && !isSameMonth(day, cursor) && "opacity-40",
-                  isSameDay(day, new Date()) && "ring-1 ring-inset ring-accent",
-                )}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  const id = e.dataTransfer.getData("text/task");
-                  if (id) void onDrop(day, id);
-                }}
-                onClick={() => setCreateOn(format(day, "yyyy-MM-dd"))}
-              >
-                <div className="mb-1 text-xs font-medium">{format(day, "d")}</div>
-                <div className="space-y-1">
-                  {it.exams.map((s) => (
-                    <div key={s.id} className="truncate rounded px-1 text-[11px] text-white" style={{ background: s.color }} onClick={(e) => { e.stopPropagation(); router.push(`/subjects/${s.id}`); }}>
-                      {s.name}
-                    </div>
-                  ))}
-                  {it.tasks.map((t) => (
-                    <div
-                      key={t.id}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData("text/task", t.id)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        router.push(`/tasks?open=${t.id}`);
-                      }}
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {days.map((day, i) => {
+              const items = itemsOf(day);
+              const today = isSameDay(day, new Date());
+              const isSel = isSameDay(day, selected);
+              const outside = view === "month" && !isSameMonth(day, cursor);
+              const limit = view === "month" ? 3 : 10;
+              return (
+                <div
+                  key={day.toISOString()}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelected(startOfDay(day))}
+                  onDoubleClick={() => setCreateOn(format(day, "yyyy-MM-dd"))}
+                  onKeyDown={(e) => e.key === "Enter" && setSelected(startOfDay(day))}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const id = e.dataTransfer.getData("text/task");
+                    if (id) void onDrop(day, id);
+                  }}
+                  className={cn(
+                    "relative cursor-pointer border-line p-1 text-left outline-none transition-colors sm:p-1.5",
+                    view === "month" ? "min-h-16 sm:min-h-24" : "min-h-40 sm:min-h-64",
+                    i % 7 !== 6 && "border-r",
+                    i < days.length - 7 && "border-b",
+                    outside && "bg-subtle/40",
+                    isSel ? "bg-accent/5" : "hover:bg-subtle/50",
+                  )}
+                >
+                  <div className="mb-1 flex justify-center sm:justify-start">
+                    <span
                       className={cn(
-                        "cursor-grab truncate rounded px-1 text-[11px] text-white",
-                        t.priority === "CRITICAL" && "ring-1 ring-white",
-                        isOverdue(t.dueDate, t.status) && "line-through opacity-90",
+                        "grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs tabular-nums",
+                        today ? "bg-accent font-semibold text-accent-fg" : isSel ? "font-semibold text-accent" : outside ? "text-muted/60" : "text-fg/80",
                       )}
-                      style={{ background: isOverdue(t.dueDate, t.status) ? "#e11d48" : t.subject?.color ?? "#64748b" }}
                     >
-                      {t.title}
-                    </div>
-                  ))}
-                  {it.events.map((e) => (
-                    <div key={e.id} className="truncate rounded px-1 text-[11px] text-white" style={{ background: e.color ?? e.subject?.color ?? "#9c6246" }}>
-                      {e.title}
-                    </div>
-                  ))}
+                      {format(day, "d")}
+                    </span>
+                  </div>
+                  {/* На телефоне — цветные точки, на компьютере — подписи */}
+                  <div className="flex flex-wrap justify-center gap-0.5 sm:hidden">
+                    {items.slice(0, 4).map((it) => (
+                      <span key={`${it.kind}-${it.id}`} className="h-1.5 w-1.5 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} />
+                    ))}
+                  </div>
+                  <div className="hidden space-y-0.5 sm:block">
+                    {items.slice(0, limit).map((it) => (
+                      <div
+                        key={`${it.kind}-${it.id}`}
+                        draggable={it.kind === "task"}
+                        onDragStart={(e) => e.dataTransfer.setData("text/task", it.id)}
+                        onClick={(e) => {
+                          if (!it.href) return;
+                          e.stopPropagation();
+                          router.push(it.href);
+                        }}
+                        title={it.title}
+                        className={cn(
+                          "flex items-center gap-1 truncate rounded px-1 py-px text-[11px] leading-4",
+                          it.kind === "exam" ? "font-semibold text-white" : "bg-subtle text-fg/90 hover:bg-line",
+                          it.kind === "task" && "cursor-grab",
+                          it.done && "text-muted line-through",
+                        )}
+                        style={it.kind === "exam" ? { background: it.color } : undefined}
+                      >
+                        {it.kind !== "exam" ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} /> : null}
+                        <span className="truncate">{it.title}</span>
+                      </div>
+                    ))}
+                    {items.length > limit ? <div className="px-1 text-[11px] text-muted">ещё {items.length - limit}</div> : null}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      )}
 
-      <Modal open={!!createOn} onClose={() => setCreateOn(null)} title="Новая задача на день">
-        {createOn ? (
-          <TaskForm subjects={subjects} initial={{ dueDate: createOn }} onDone={() => setCreateOn(null)} />
-        ) : null}
+        <aside className="card self-start">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <div className="text-sm font-semibold capitalize">{format(selected, "EEEE, d MMMM", { locale: ru })}</div>
+            <Button variant="ghost" size="icon-sm" aria-label="Задача на этот день" onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="p-1.5">
+            {selectedItems.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-muted">Ничего не запланировано</p>
+            ) : (
+              selectedItems.map((it) => {
+                const inner = (
+                  <>
+                    {it.kind === "exam" ? (
+                      <GraduationCap className="h-4 w-4 shrink-0" style={{ color: it.color }} />
+                    ) : (
+                      <span className="mx-1 h-2 w-2 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} />
+                    )}
+                    <span className={cn("min-w-0 flex-1 truncate text-sm", it.done && "text-muted line-through", it.kind === "exam" && "font-medium")}>
+                      {it.kind === "exam" ? `Экзамен: ${it.title}` : it.title}
+                    </span>
+                  </>
+                );
+                return it.href ? (
+                  <Link key={`${it.kind}-${it.id}`} href={it.href} className="flex items-center gap-2 rounded-xl px-2.5 py-2 transition-colors hover:bg-subtle">
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={`${it.kind}-${it.id}`} className="flex items-center gap-2 px-2.5 py-2">
+                    {inner}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <p className="border-t border-line px-4 py-2.5 text-xs text-muted max-sm:hidden">Двойной клик по дню — новая задача. Задачи можно перетаскивать.</p>
+        </aside>
+      </div>
+
+      <Modal open={!!createOn} onClose={() => setCreateOn(null)} title="Новая задача" description={createOn ? format(new Date(createOn), "d MMMM, EEEE", { locale: ru }) : undefined}>
+        {createOn ? <TaskForm subjects={subjects} initial={{ dueDate: createOn }} onDone={() => setCreateOn(null)} /> : null}
       </Modal>
-      <Modal open={eventOpen} onClose={() => setEventOpen(false)} title="Пользовательское событие">
+      <Modal open={eventOpen} onClose={() => setEventOpen(false)} title="Новое событие">
         <form
-          className="space-y-3"
+          className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            const res = await createEvent({
-              title: eventTitle,
-              startAt: format(cursor, "yyyy-MM-dd"),
-              allDay: true,
-            });
+            const res = await createEvent({ title: eventTitle, startAt: eventDate, allDay: true });
             if (!res.ok) toast.push(res.error, "err");
             else {
               toast.push("Событие создано");
               setEventOpen(false);
               setEventTitle("");
-              router.refresh();
             }
           }}
         >
           <Field label="Название">
-            <Input value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} required />
+            <Input value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} required autoFocus placeholder="Консультация, пересдача…" />
+          </Field>
+          <Field label="Дата">
+            <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
           </Field>
           <Button type="submit" className="w-full">
             Добавить

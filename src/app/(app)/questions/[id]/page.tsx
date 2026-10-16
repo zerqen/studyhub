@@ -9,12 +9,12 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
   const question = await prisma.question.findFirst({
     where: { id, userId: user.id },
     include: {
-      subject: true,
+      subject: { select: { id: true, name: true, color: true, emoji: true } },
       tags: { include: { tag: true } },
-      attachments: true,
-      notes: { orderBy: { updatedAt: "desc" }, take: 6 },
-      comments: { include: { attachments: true }, orderBy: { createdAt: "asc" } },
-      attempts: { orderBy: { createdAt: "desc" }, take: 12 },
+      attachments: { select: { id: true, originalName: true, mimeType: true, size: true } },
+      notes: { orderBy: { updatedAt: "desc" }, take: 6, select: { id: true, title: true, content: true, color: true } },
+      comments: { include: { attachments: { select: { id: true, originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: "asc" } },
+      attempts: { orderBy: { createdAt: "desc" }, take: 12, select: { id: true, knew: true, createdAt: true } },
       tasks: { select: { id: true, title: true, status: true }, orderBy: { createdAt: "desc" } },
     },
   });

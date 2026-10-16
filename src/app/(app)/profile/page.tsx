@@ -3,30 +3,58 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { updateProfile } from "@/actions/profile";
+import { initials } from "@/lib/utils";
 import { FileUploader } from "@/components/files/uploader";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { PageHeader } from "@/components/ui/page";
 import { useToast } from "@/components/ui/toast";
 
 export default function ProfilePage() {
   const { data: session, update } = useSession();
-  const [name, setName] = useState(session?.user?.name ?? "");
+  const [name, setName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const value = name ?? session?.user?.name ?? "";
+  const image = session?.user?.image;
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    const result = await updateProfile({ name });
+    setBusy(true);
+    const result = await updateProfile({ name: value });
+    setBusy(false);
     if (!result.ok) toast.push(result.error, "err");
-    else { toast.push("Профиль сохранён"); await update({ name }); }
+    else {
+      toast.push("Профиль сохранён");
+      await update({ name: value });
+    }
   }
+
   return (
-    <div className="mx-auto max-w-xl space-y-5">
-      <div><h1 className="text-2xl font-semibold">Профиль</h1><p className="text-sm text-[var(--muted)]">{session?.user?.email}</p></div>
-      <div className="rounded-2xl bg-[var(--bg-elev)] p-5 shadow-card">
-        <form className="space-y-4" onSubmit={save}>
-          <Field label="Имя"><Input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} /></Field>
-          <Button type="submit">Сохранить имя</Button>
+    <div className="mx-auto max-w-xl">
+      <PageHeader title="Профиль" />
+      <div className="card divide-y divide-line">
+        <div className="flex items-center gap-4 p-5">
+          {image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={`/api/files/${image}`} alt="" className="h-16 w-16 rounded-full object-cover" />
+          ) : (
+            <span className="grid h-16 w-16 place-items-center rounded-full bg-accent/10 text-lg font-semibold text-accent">{initials(value)}</span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium">{session?.user?.name}</div>
+            <div className="truncate text-sm text-muted">{session?.user?.email}</div>
+          </div>
+          {session?.user?.id ? <FileUploader parent={{ avatar: true }} /> : null}
+        </div>
+        <form className="space-y-4 p-5" onSubmit={save}>
+          <Field label="Имя">
+            <Input value={value} onChange={(e) => setName(e.target.value)} required minLength={2} />
+          </Field>
+          <Button type="submit" loading={busy}>
+            Сохранить
+          </Button>
         </form>
-        {session?.user?.id ? <div className="mt-5 border-t border-black/10 pt-4 dark:border-white/10"><p className="mb-2 text-sm font-medium">Аватар</p><FileUploader parent={{ avatar: true }} /></div> : null}
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { DIFFICULTIES, QUESTION_STATUSES } from "@/lib/constants";
 import { createQuestion, updateQuestion } from "@/actions/questions";
 import { Button } from "../ui/button";
@@ -30,19 +29,11 @@ export function QuestionForm({
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
-  const router = useRouter();
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent, keepOpen = false) {
     e.preventDefault();
     setBusy(true);
-    const payload = {
-      ...v,
-      subjectId,
-      tags: v.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-    };
+    const payload = { ...v, subjectId, tags: v.tags.split(",").map((t) => t.trim()).filter(Boolean) };
     const res = id ? await updateQuestion(id, payload) : await createQuestion(payload);
     setBusy(false);
     if (!res.ok) {
@@ -50,20 +41,20 @@ export function QuestionForm({
       return;
     }
     toast.push(id ? "Вопрос обновлён" : "Вопрос добавлен");
-    onDone?.();
-    router.refresh();
+    if (keepOpen) setV({ ...v, text: "", answer: "", explanation: "" });
+    else onDone?.();
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={(e) => submit(e)} className="space-y-4">
       <Field label="Вопрос" error={err}>
-        <Textarea rows={3} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} required />
+        <Textarea rows={2} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} required autoFocus placeholder="Сформулируй, как в билете" />
       </Field>
       <Field label="Ответ">
-        <Textarea rows={3} value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} />
+        <Textarea rows={5} value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} placeholder="Можно заполнить позже" />
       </Field>
       <Field label="Пояснение">
-        <Textarea rows={2} value={v.explanation} onChange={(e) => setV({ ...v, explanation: e.target.value })} />
+        <Textarea rows={2} value={v.explanation} onChange={(e) => setV({ ...v, explanation: e.target.value })} placeholder="Подсказка, пример, источник" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Статус">
@@ -85,12 +76,19 @@ export function QuestionForm({
           </Select>
         </Field>
       </div>
-      <Field label="Теги">
-        <Input value={v.tags} onChange={(e) => setV({ ...v, tags: e.target.value })} />
+      <Field label="Теги" hint="Через запятую">
+        <Input value={v.tags} onChange={(e) => setV({ ...v, tags: e.target.value })} placeholder="определения, формулы" />
       </Field>
-      <Button type="submit" disabled={busy} className="w-full">
-        {busy ? "Сохранение…" : "Сохранить вопрос"}
-      </Button>
+      <div className="flex gap-2">
+        {!id ? (
+          <Button type="button" variant="secondary" disabled={busy || !v.text.trim()} className="flex-1" onClick={(e) => submit(e, true)}>
+            Сохранить и ещё
+          </Button>
+        ) : null}
+        <Button type="submit" loading={busy} className="flex-1">
+          {id ? "Сохранить" : "Добавить"}
+        </Button>
+      </div>
     </form>
   );
 }

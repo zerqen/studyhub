@@ -1,3 +1,5 @@
+import type { Tone } from "@/components/ui/badge";
+
 export const SUBJECT_TYPES = [
   { value: "EXAM", label: "Экзамен" },
   { value: "CREDIT", label: "Зачёт" },
@@ -8,10 +10,10 @@ export const SUBJECT_TYPES = [
 ] as const;
 
 export const TASK_PRIORITIES = [
-  { value: "LOW", label: "Низкий", className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
-  { value: "MEDIUM", label: "Средний", className: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200" },
-  { value: "HIGH", label: "Высокий", className: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
-  { value: "CRITICAL", label: "Критический", className: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200" },
+  { value: "LOW", label: "Низкий" },
+  { value: "MEDIUM", label: "Средний" },
+  { value: "HIGH", label: "Высокий" },
+  { value: "CRITICAL", label: "Критический" },
 ] as const;
 
 export const TASK_STATUSES = [
@@ -43,19 +45,20 @@ export const DIFFICULTIES = [
 ] as const;
 
 export const SUBJECT_COLORS = [
-  "#9c6246",
-  "#2563eb",
-  "#7c3aed",
-  "#db2777",
-  "#ea580c",
-  "#ca8a04",
-  "#0891b2",
-  "#4f46e5",
-  "#16a34a",
-  "#b45309",
+  "#6366f1",
+  "#3b82f6",
+  "#0ea5e9",
+  "#14b8a6",
+  "#22c55e",
+  "#eab308",
+  "#f97316",
+  "#ef4444",
+  "#ec4899",
+  "#a855f7",
 ];
 
-export const NOTE_COLORS = ["#fde68a", "#bbf7d0", "#bfdbfe", "#fbcfe8", "#e9d5ff", "#fed7aa", "#e2e8f0"];
+// Цвет заметки — это метка (полоска слева), а не фон: так заметки читаются и в тёмной теме
+export const NOTE_COLORS = ["#eab308", "#22c55e", "#3b82f6", "#ec4899", "#a855f7", "#f97316", "#94a3b8"];
 
 export const EMOJIS = ["📘", "📗", "📙", "📕", "🧠", "📐", "🧪", "💻", "📜", "🎯", "📝", "🔬", "🌍", "🎵", "⚖️"];
 
@@ -80,4 +83,25 @@ export const ALLOWED_MIME = new Set([
 
 export function labelOf<T extends { value: string; label: string }>(list: readonly T[], value?: string | null) {
   return list.find((x) => x.value === value)?.label ?? value ?? "—";
+}
+
+export function questionStatusTone(status?: string | null): Tone {
+  if (status === "LEARNED") return "success";
+  if (status === "REVIEW") return "warning";
+  if (status === "IN_PROGRESS") return "accent";
+  return "neutral";
+}
+
+export function taskStatusTone(status?: string | null): Tone {
+  if (status === "DONE") return "success";
+  if (status === "OVERDUE") return "danger";
+  if (status === "IN_PROGRESS") return "accent";
+  return "neutral";
+}
+
+export function priorityTone(priority?: string | null): Tone {
+  if (priority === "CRITICAL") return "danger";
+  if (priority === "HIGH") return "warning";
+  if (priority === "LOW") return "neutral";
+  return "accent";
 }

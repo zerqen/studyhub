@@ -15,7 +15,7 @@ export async function globalSearch(query: string): Promise<ActionResult<SearchHi
   return withUser(async (userId) => {
     const q = query.trim();
     if (q.length < 1) return [];
-    const contains = { contains: q };
+    const contains = { contains: q, mode: "insensitive" as const };
     const [subjects, tasks, subtasks, tickets, questions, notes, files, tags] = await Promise.all([
       prisma.subject.findMany({ where: { userId, OR: [{ name: contains }, { teacher: contains }] }, take: 8 }),
       prisma.task.findMany({ where: { userId, OR: [{ title: contains }, { description: contains }] }, take: 8 }),
@@ -37,19 +37,19 @@ export async function globalSearch(query: string): Promise<ActionResult<SearchHi
 
     const hits: SearchHit[] = [
       ...subjects.map((s) => ({ type: "subject" as const, id: s.id, title: s.name, href: `/subjects/${s.id}` })),
-      ...tasks.map((t) => ({ type: "task" as const, id: t.id, title: t.title, href: `/tasks?open=${t.id}` })),
+      ...tasks.map((t) => ({ type: "task" as const, id: t.id, title: t.title, href: `/tasks/${t.id}` })),
       ...subtasks.map((t) => ({
         type: "subtask" as const,
         id: t.id,
         title: t.title,
-        href: `/tasks?open=${t.taskId}`,
+        href: `/tasks/${t.taskId}`,
         hint: "Подзадача",
       })),
       ...tickets.map((t) => ({
         type: "ticket" as const,
         id: t.id,
         title: t.title,
-        href: `/subjects/${t.subjectId}?tab=tickets`,
+        href: `/subjects/${t.subjectId}?tab=questions`,
         hint: t.subject.name,
       })),
       ...questions.map((t) => ({

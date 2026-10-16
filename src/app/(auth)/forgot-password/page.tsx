@@ -13,41 +13,46 @@ export default function ForgotPage() {
   const [busy, setBusy] = useState(false);
 
   return (
-    <AuthCard title="Восстановление пароля" hint="Для локальной разработки ссылка показывается на экране (почта опциональна).">
+    <AuthCard
+      title="Восстановление пароля"
+      hint="Укажи email — пришлём ссылку для сброса."
+      footer={
+        <Link className="hover:text-fg" href="/login">
+          ← Назад ко входу
+        </Link>
+      }
+    >
       <form
-        className="space-y-3"
+        className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
           const res = await forgotPasswordAction({ email });
           setBusy(false);
-          if (res.ok) setUrl(res.data?.resetUrl ?? "Если аккаунт существует, ссылка создана.");
+          if (res.ok) setUrl(res.data?.resetUrl ?? "Если аккаунт существует, ссылка отправлена на почту.");
         }}
       >
         <Field label="Email">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         </Field>
-        <Button type="submit" className="w-full" disabled={busy}>
+        <Button type="submit" className="w-full" size="lg" loading={busy}>
           Отправить ссылку
         </Button>
       </form>
       {url ? (
-        <p className="mt-4 break-all text-sm">
-          Ссылка для сброса:{" "}
+        <div className="mt-4 break-all rounded-lg bg-subtle px-3 py-2.5 text-sm">
           {url.startsWith("http") ? (
-            <Link className="underline" href={url}>
-              {url}
-            </Link>
+            <>
+              Ссылка для сброса:{" "}
+              <Link className="text-accent underline" href={url}>
+                {url}
+              </Link>
+            </>
           ) : (
             url
           )}
-        </p>
+        </div>
       ) : null}
-      <p className="mt-4 text-center text-sm">
-        <Link className="underline" href="/login">
-          Назад ко входу
-        </Link>
-      </p>
     </AuthCard>
   );
 }

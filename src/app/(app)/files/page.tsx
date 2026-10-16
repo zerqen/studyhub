@@ -1,14 +1,27 @@
+import { FolderOpen } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { FileGrid } from "@/components/files/file-grid";
+import { PageHeader } from "@/components/ui/page";
+import { EmptyState } from "@/components/ui/empty";
+
+export const metadata = { title: "Файлы" };
 
 export default async function FilesPage() {
   const user = await requireUser();
-  const files = await prisma.attachment.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+  const files = await prisma.attachment.findMany({
+    where: { userId: user.id, ...(user.avatarPath ? { NOT: { id: user.avatarPath } } : {}) },
+    select: { id: true, originalName: true, mimeType: true, size: true },
+    orderBy: { createdAt: "desc" },
+  });
   return (
-    <div className="space-y-5">
-      <div><h1 className="text-2xl font-semibold">Файлы</h1><p className="text-sm text-[var(--muted)]">Материалы, прикреплённые к предметам и задачам.</p></div>
-      <FileGrid files={files} />
+    <div>
+      <PageHeader title="Файлы" description="Всё, что прикреплено к предметам, вопросам, задачам и заметкам" />
+      {files.length ? (
+        <FileGrid files={files} />
+      ) : (
+        <EmptyState icon={FolderOpen} title="Файлов пока нет" hint="Прикрепляй материалы на страницах предметов, вопросов и задач." />
+      )}
     </div>
   );
 }

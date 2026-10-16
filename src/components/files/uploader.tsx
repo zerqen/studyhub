@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, Paperclip, UploadCloud } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "../ui/toast";
-import { Button } from "../ui/button";
+import { buttonClass } from "../ui/button";
 
 export function FileUploader({
   parent,
@@ -22,6 +24,8 @@ export function FileUploader({
   compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const router = useRouter();
 
@@ -29,22 +33,22 @@ export function FileUploader({
     if (!files?.length) return;
     setBusy(true);
     try {
-      for (const file of Array.from(files)) {
-        const fd = new FormData();
-        fd.set("file", file);
-        if (parent?.subjectId) fd.set("subjectId", parent.subjectId);
-        if (parent?.taskId) fd.set("taskId", parent.taskId);
-        if (parent?.subtaskId) fd.set("subtaskId", parent.subtaskId);
-        if (parent?.ticketId) fd.set("ticketId", parent.ticketId);
-        if (parent?.questionId) fd.set("questionId", parent.questionId);
-        if (parent?.noteId) fd.set("noteId", parent.noteId);
-        if (parent?.commentId) fd.set("commentId", parent.commentId);
-        if (parent?.avatar) fd.set("avatar", "1");
-        const res = await fetch("/api/upload", { method: "POST", body: fd });
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.error);
-      }
-      toast.push("Файл загружен");
+      // Файлы грузятся параллельно
+      await Promise.all(
+        Array.from(files).map(async (file) => {
+          const fd = new FormData();
+          fd.set("file", file);
+          for (const key of ["subjectId", "taskId", "subtaskId", "ticketId", "questionId", "noteId", "commentId"] as const) {
+            const v = parent?.[key];
+            if (v) fd.set(key, v);
+          }
+          if (parent?.avatar) fd.set("avatar", "1");
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          const json = await res.json().catch(() => ({ ok: false, error: "Ошибка загрузки" }));
+          if (!json.ok) throw new Error(json.error ?? "Ошибка загрузки");
+        }),
+      );
+      toast.push(files.length === 1 ? "Файл загружен" : `Загружено файлов: ${files.length}`);
       router.refresh();
     } catch (e) {
       toast.push(e instanceof Error ? e.message : "Ошибка загрузки", "err");
@@ -53,14 +57,52 @@ export function FileUploader({
     }
   }
 
+  const input = (
+    <input
+      ref={inputRef}
+      type="file"
+      className="hidden"
+      multiple={!parent?.avatar}
+      accept={parent?.avatar ? "image/*" : undefined}
+      onChange={(e) => {
+        void onFiles(e.target.files);
+        e.currentTarget.value = "";
+      }}
+    />
+  );
+
+  if (compact || parent?.avatar) {
+    return (
+      <label className={cn(buttonClass("secondary", "sm"), "cursor-pointer", busy && "pointer-events-none opacity-60")}>
+        {input}
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+        {busy ? "Загрузка…" : parent?.avatar ? "Сменить фото" : "Прикрепить"}
+      </label>
+    );
+  }
+
   return (
-    <label className={compact ? "inline-flex" : "block"}>
-      <input type="file" className="hidden" multiple={!parent?.avatar} onChange={(e) => onFiles(e.target.files)} />
-      <span>
-        <Button type="button" variant="secondary" disabled={busy} className="pointer-events-none">
-          {busy ? "Загрузка…" : parent?.avatar ? "Сменить аватар" : "Прикрепить файл"}
-        </Button>
-      </span>
+    <label
+      className={cn(
+        "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed px-6 py-7 text-center transition-colors",
+        dragging ? "border-accent bg-accent/5" : "border-line hover:border-fg/20 hover:bg-subtle/40",
+        busy && "pointer-events-none opacity-60",
+      )}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDragging(false);
+        void onFiles(event.dataTransfer.files);
+      }}
+    >
+      {input}
+      {busy ? <Loader2 className="h-6 w-6 animate-spin text-muted" /> : <UploadCloud className={cn("h-6 w-6", dragging ? "text-accent" : "text-muted")} />}
+      <span className="text-sm font-medium">{busy ? "Загружаю…" : dragging ? "Отпусти, чтобы загрузить" : "Перетащи файлы или нажми, чтобы выбрать"}</span>
+      <span className="text-xs text-muted">PDF, документы, картинки, аудио · до 15 МБ</span>
     </label>
   );
 }

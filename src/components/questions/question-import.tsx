@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { importQuestions } from "@/actions/questions";
 import { Button } from "../ui/button";
 import { useToast } from "../ui/toast";
@@ -16,23 +16,31 @@ const example = `[
 ]`;
 
 export function QuestionImport({ subjectId, onDone }: { subjectId: string; onDone?: () => void }) {
-  const [value, setValue] = useState(example);
+  const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const parsed = useMemo(() => {
+    if (!value.trim()) return { count: 0, error: null };
+    try {
+      const v = JSON.parse(value);
+      return Array.isArray(v) ? { count: v.length, error: null } : { count: 0, error: "Нужен JSON-массив [ … ]" };
+    } catch {
+      return { count: 0, error: "JSON пока невалиден" };
+    }
+  }, [value]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
-      const questions = JSON.parse(value);
-      const result = await importQuestions({ subjectId, questions });
+      const result = await importQuestions({ subjectId, questions: JSON.parse(value) });
       if (!result.ok) toast.push(result.error, "err");
       else {
         toast.push(`Добавлено вопросов: ${result.data?.count ?? 0}`);
         onDone?.();
       }
     } catch {
-      toast.push("Проверьте формат JSON-массива", "err");
+      toast.push("Проверь формат JSON-массива", "err");
     } finally {
       setBusy(false);
     }
@@ -40,9 +48,28 @@ export function QuestionImport({ subjectId, onDone }: { subjectId: string; onDon
 
   return (
     <form className="space-y-3" onSubmit={submit}>
-      <p className="text-sm text-[var(--muted)]">Вставьте JSON-массив объектов с полями <code>text</code>, <code>answer</code>, <code>explanation</code>, <code>difficulty</code> и <code>tags</code>.</p>
-      <textarea className="min-h-80 w-full rounded-xl border border-black/10 bg-white p-3 font-mono text-xs outline-none ring-info/40 focus:ring-2 dark:border-white/10 dark:bg-ink-900" value={value} onChange={(event) => setValue(event.target.value)} spellCheck={false} />
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? "Импорт…" : "Импортировать вопросы"}</Button>
+      <p className="text-sm text-muted">
+        Поля: <code className="rounded bg-subtle px-1">text</code> (обязательно), <code className="rounded bg-subtle px-1">answer</code>,{" "}
+        <code className="rounded bg-subtle px-1">explanation</code>, <code className="rounded bg-subtle px-1">difficulty</code> (EASY / MEDIUM / HARD),{" "}
+        <code className="rounded bg-subtle px-1">tags</code>.
+      </p>
+      <textarea
+        aria-label="JSON вопросов"
+        className="min-h-72 w-full rounded-xl border border-line bg-subtle/50 p-3 font-mono text-xs leading-relaxed outline-none transition-[border-color,box-shadow] focus:border-accent/60 focus:ring-4 focus:ring-accent/10"
+        value={value}
+        placeholder={example}
+        onChange={(event) => setValue(event.target.value)}
+        spellCheck={false}
+      />
+      <div className={`flex items-center justify-between text-xs ${parsed.error ? "text-danger" : "text-muted"}`}>
+        <span>{parsed.error ?? (parsed.count ? `Готово к импорту: ${parsed.count}` : "Вставь массив вопросов")}</span>
+        <button type="button" className="font-medium text-accent hover:underline" onClick={() => setValue(example)}>
+          Вставить пример
+        </button>
+      </div>
+      <Button type="submit" className="w-full" loading={busy} disabled={!!parsed.error || parsed.count === 0}>
+        Импортировать {parsed.count ? parsed.count : ""}
+      </Button>
     </form>
   );
 }

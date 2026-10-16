@@ -40,21 +40,29 @@ export async function importQuestions(input: unknown): Promise<ActionResult<{ co
     if (!subject) throw new Error("Предмет не найден");
     const last = await prisma.question.aggregate({ where: { subjectId: subject.id }, _max: { sortOrder: true } });
     let sortOrder = (last._max.sortOrder ?? 0) + 1;
-    for (const item of parsed.data.questions) {
-      const tagRows = await syncTags(userId, item.tags);
-      await prisma.question.create({
-        data: {
-          userId,
-          subjectId: subject.id,
-          text: item.text,
-          answer: item.answer ?? null,
-          explanation: item.explanation ?? null,
-          difficulty: item.difficulty ?? "MEDIUM",
-          sortOrder: sortOrder++,
-          tags: { create: tagRows.map((tag) => ({ tagId: tag.id })) },
-        },
-      });
-    }
+    // Теги синхронизируем один раз на весь импорт, а вопросы создаём одной транзакцией
+    const allTags = await syncTags(userId, parsed.data.questions.flatMap((item: { tags?: string[] }) => item.tags ?? []));
+    const tagId = new Map(allTags.map((t) => [t.name, t.id]));
+    await prisma.$transaction(
+      parsed.data.questions.map((item: { text: string; answer?: string | null; explanation?: string | null; difficulty?: string; tags?: string[] }) =>
+        prisma.question.create({
+          data: {
+            userId,
+            subjectId: subject.id,
+            text: item.text,
+            answer: item.answer ?? null,
+            explanation: item.explanation ?? null,
+            difficulty: item.difficulty ?? "MEDIUM",
+            sortOrder: sortOrder++,
+            tags: {
+              create: [...new Set<string>((item.tags ?? []).map((n: string) => n.trim()).filter(Boolean))]
+                .filter((n) => tagId.has(n))
+                .map((n) => ({ tagId: tagId.get(n)! })),
+            },
+          },
+        }),
+      ),
+    );
     refreshAll();
     return { count: parsed.data.questions.length };
   });
@@ -92,21 +100,15 @@ export async function deleteQuestion(id: string): Promise<ActionResult> {
 
 export async function recordAttempt(questionId: string, knew: boolean): Promise<ActionResult> {
   return withUser(async (userId) => {
-    const q = await prisma.question.findFirst({ where: { id: questionId, userId } });
+    const q = await prisma.question.findFirst({ where: { id: questionId, userId }, select: { subjectId: true } });
     if (!q) throw new Error("Вопрос не найден");
-    await prisma.questionAttempt.create({ data: { userId, questionId, knew } });
-    await prisma.question.update({
-      where: { id: questionId },
-      data: { status: knew ? "LEARNED" : "REVIEW" },
-    });
-    await prisma.progressLog.create({
-      data: {
-        userId,
-        subjectId: q.subjectId,
-        type: knew ? "QUESTION_KNOWN" : "QUESTION_UNKNOWN",
-        value: questionId,
-      },
-    });
+    await prisma.$transaction([
+      prisma.questionAttempt.create({ data: { userId, questionId, knew } }),
+      prisma.question.update({ where: { id: questionId }, data: { status: knew ? "LEARNED" : "REVIEW" } }),
+      prisma.progressLog.create({
+        data: { userId, subjectId: q.subjectId, type: knew ? "QUESTION_KNOWN" : "QUESTION_UNKNOWN", value: questionId },
+      }),
+    ]);
     refreshAll();
   });
 }

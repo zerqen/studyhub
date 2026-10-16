@@ -1,137 +1,189 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Bold, Check, Code, Eye, Heading2, Italic, List, ListTodo, Loader2, Pencil, Pin, Quote, Trash2 } from "lucide-react";
 import { autosaveNote, createNote, deleteNote, updateNote } from "@/actions/notes";
 import { NOTE_COLORS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
-import { Field, Input, Select, Textarea } from "../ui/field";
+import { Input, Select } from "../ui/field";
 import { useToast } from "../ui/toast";
-import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "../ui/modal";
 import { FileUploader } from "../files/uploader";
 
-function wrap(sel: HTMLTextAreaElement, before: string, after = "") {
-  const start = sel.selectionStart;
-  const end = sel.selectionEnd;
-  const v = sel.value;
-  return v.slice(0, start) + before + v.slice(start, end) + after + v.slice(end);
-}
+type NoteInput = {
+  id: string;
+  title: string;
+  content: string;
+  color: string;
+  pinned: boolean;
+  subjectId: string | null;
+  taskId?: string | null;
+  questionId?: string | null;
+  tags?: { tag: { name: string } }[];
+};
+
+const tools = [
+  { icon: Heading2, label: "Заголовок", before: "## ", after: "" },
+  { icon: Bold, label: "Жирный", before: "**", after: "**" },
+  { icon: Italic, label: "Курсив", before: "*", after: "*" },
+  { icon: List, label: "Список", before: "- ", after: "" },
+  { icon: ListTodo, label: "Чек-лист", before: "- [ ] ", after: "" },
+  { icon: Code, label: "Код", before: "`", after: "`" },
+  { icon: Quote, label: "Цитата", before: "> ", after: "" },
+];
 
 export function NoteEditor({
   note,
   subjects,
   initialTaskId,
   initialQuestionId,
+  defaultSubjectId,
+  onDone,
 }: {
-  note?: {
-    id: string;
-    title: string;
-    content: string;
-    color: string;
-    pinned: boolean;
-    subjectId: string | null;
-    taskId?: string | null;
-    questionId?: string | null;
-    tags?: { tag: { name: string } }[];
-  };
+  note?: NoteInput;
   subjects: { id: string; name: string }[];
   initialTaskId?: string;
   initialQuestionId?: string;
+  defaultSubjectId?: string;
+  onDone?: () => void;
 }) {
   const [title, setTitle] = useState(note?.title ?? "");
   const [content, setContent] = useState(note?.content ?? "");
-  const [color, setColor] = useState(note?.color ?? "#fde68a");
+  const [color, setColor] = useState(note?.color ?? NOTE_COLORS[0]);
   const [pinned, setPinned] = useState(note?.pinned ?? false);
-  const [subjectId, setSubjectId] = useState(note?.subjectId ?? "");
-  const [taskId] = useState(note?.taskId ?? initialTaskId ?? "");
-  const [questionId] = useState(note?.questionId ?? initialQuestionId ?? "");
+  const [subjectId, setSubjectId] = useState(note?.subjectId ?? defaultSubjectId ?? "");
   const [tags, setTags] = useState(note?.tags?.map((t) => t.tag.name).join(", ") ?? "");
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(Boolean(note?.content));
   const [confirm, setConfirm] = useState(false);
+  const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
+  const [busy, setBusy] = useState(false);
+  const body = useRef<HTMLTextAreaElement>(null);
+  const first = useRef(true);
   const toast = useToast();
   const router = useRouter();
 
+  // Автосохранение текста существующей заметки (без перерисовки страницы)
+  const noteId = note?.id;
   useEffect(() => {
-    if (!note) return;
-    const t = setTimeout(() => {
-      void autosaveNote(note.id, title, content);
-    }, 800);
+    if (!noteId) return;
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setSaving("saving");
+    const t = setTimeout(async () => {
+      const r = await autosaveNote(noteId, title, content);
+      setSaving(r.ok ? "saved" : "idle");
+      if (!r.ok) toast.push(r.error, "err");
+    }, 700);
     return () => clearTimeout(t);
-  }, [note, title, content]);
+  }, [noteId, title, content, toast]);
 
-  const toolbar = useMemo(
-    () => [
-      { l: "H", fn: (el: HTMLTextAreaElement) => wrap(el, "## ") },
-      { l: "B", fn: (el: HTMLTextAreaElement) => wrap(el, "**", "**") },
-      { l: "I", fn: (el: HTMLTextAreaElement) => wrap(el, "*", "*") },
-      { l: "•", fn: (el: HTMLTextAreaElement) => wrap(el, "- ") },
-      { l: "☐", fn: (el: HTMLTextAreaElement) => wrap(el, "- [ ] ") },
-      { l: "</>", fn: (el: HTMLTextAreaElement) => wrap(el, "`", "`") },
-      { l: "“", fn: (el: HTMLTextAreaElement) => wrap(el, "> ") },
-    ],
-    [],
-  );
+  function applyTool(before: string, after: string) {
+    const el = body.current;
+    if (!el) return;
+    const { selectionStart: s, selectionEnd: e, value } = el;
+    const next = value.slice(0, s) + before + value.slice(s, e) + after + value.slice(e);
+    setContent(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(s + before.length, e + before.length);
+    });
+  }
 
-  async function saveMeta() {
+  async function save() {
+    setBusy(true);
     const payload = {
-      title: title || "Без названия",
+      title: title.trim() || "Без названия",
       content,
       color,
       pinned,
       subjectId: subjectId || null,
-      taskId: taskId || null,
-      questionId: questionId || null,
+      taskId: note?.taskId ?? initialTaskId ?? null,
+      questionId: note?.questionId ?? initialQuestionId ?? null,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
     };
     if (note) {
       const res = await updateNote(note.id, payload);
       if (!res.ok) toast.push(res.error, "err");
-      else toast.push("Заметка сохранена");
+      else toast.push("Сохранено");
     } else {
       const res = await createNote(payload);
       if (!res.ok) toast.push(res.error, "err");
       else {
         toast.push("Заметка создана");
+        onDone?.();
         if (res.data?.id) router.push(`/notes?open=${res.data.id}`);
       }
     }
-    router.refresh();
+    setBusy(false);
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-black/5 bg-[var(--bg-elev)] p-4 dark:border-white/10" style={{ borderTop: `6px solid ${color}` }}>
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Заголовок" />
-      <div className="flex flex-wrap gap-1">
-        {toolbar.map((b) => (
-          <button
-            key={b.l}
-            type="button"
-            className="rounded-lg border border-black/10 px-2 py-1 text-xs dark:border-white/10"
-            onClick={() => {
-              const el = document.getElementById("note-body") as HTMLTextAreaElement | null;
-              if (!el) return;
-              setContent(b.fn(el));
-            }}
-          >
-            {b.l}
-          </button>
-        ))}
-        <button type="button" className="ml-auto text-xs underline" onClick={() => setPreview((p) => !p)}>
-          {preview ? "Редактор" : "Просмотр"}
-        </button>
+    <div className="card overflow-hidden">
+      <div className="h-1" style={{ background: color }} />
+      <div className="px-5 pt-4 sm:px-6">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Без названия"
+          aria-label="Заголовок"
+          className="w-full bg-transparent text-xl font-semibold tracking-tight outline-none placeholder:text-muted/60"
+          autoFocus={!note}
+        />
       </div>
+
+      <div className="flex items-center gap-0.5 border-b border-line px-4 py-2 sm:px-5">
+        {!preview
+          ? tools.map((t) => (
+              <button
+                key={t.label}
+                type="button"
+                title={t.label}
+                aria-label={t.label}
+                onClick={() => applyTool(t.before, t.after)}
+                className="grid h-8 w-8 place-items-center rounded-lg text-muted transition-colors hover:bg-subtle hover:text-fg"
+              >
+                <t.icon className="h-4 w-4" />
+              </button>
+            ))
+          : null}
+        <div className="ml-auto flex items-center gap-2">
+          {note ? (
+            <span className="flex items-center gap-1 text-xs text-muted">
+              {saving === "saving" ? <Loader2 className="h-3 w-3 animate-spin" /> : saving === "saved" ? <Check className="h-3 w-3" /> : null}
+              {saving === "saving" ? "Сохраняю…" : saving === "saved" ? "Сохранено" : ""}
+            </span>
+          ) : null}
+          <Button type="button" variant="ghost" size="sm" onClick={() => setPreview((p) => !p)}>
+            {preview ? <Pencil className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {preview ? "Редактировать" : "Просмотр"}
+          </Button>
+        </div>
+      </div>
+
       {preview ? (
-        <div className="prose-note min-h-40 rounded-xl bg-white/50 p-3 dark:bg-black/20">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || "_Пусто_"}</ReactMarkdown>
+        <div className="prose-note min-h-72 cursor-text px-5 py-4 sm:px-6" onDoubleClick={() => setPreview(false)}>
+          {content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown> : <p className="text-muted">Пусто. Двойной клик — начать писать.</p>}
         </div>
       ) : (
-        <Textarea id="note-body" rows={12} value={content} onChange={(e) => setContent(e.target.value)} />
+        <textarea
+          ref={body}
+          rows={14}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Пиши в Markdown: ## заголовок, **жирный**, - список, - [ ] задача"
+          className="block min-h-72 w-full resize-y bg-transparent px-5 py-4 font-mono text-[13.5px] leading-relaxed outline-none placeholder:text-muted/60 sm:px-6"
+        />
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Предмет">
-          <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
+
+      <div className="space-y-3 border-t border-line bg-subtle/30 px-5 py-4 sm:px-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Select value={subjectId} onChange={(e) => setSubjectId(e.target.value)} aria-label="Предмет">
             <option value="">Без предмета</option>
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>
@@ -139,37 +191,42 @@ export function NoteEditor({
               </option>
             ))}
           </Select>
-        </Field>
-        <Field label="Теги">
-          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
-        </Field>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {NOTE_COLORS.map((c) => (
+          <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Теги через запятую" aria-label="Теги" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1.5">
+            {NOTE_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label="Цвет метки"
+                className={cn("h-5 w-5 rounded-full transition-transform", color === c ? "scale-110 ring-2 ring-fg/30 ring-offset-2 ring-offset-surface" : "hover:scale-110")}
+                style={{ background: c }}
+                onClick={() => setColor(c)}
+              />
+            ))}
+          </div>
           <button
-            key={c}
             type="button"
-            className="h-6 w-6 rounded-full"
-            style={{ background: c, outline: color === c ? "2px solid #111" : undefined }}
-            onClick={() => setColor(c)}
-          />
-        ))}
-        <label className="ml-2 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-          Закрепить
-        </label>
+            onClick={() => setPinned(!pinned)}
+            className={cn("ml-1 inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] transition-colors", pinned ? "bg-accent/10 text-accent" : "text-muted hover:bg-subtle")}
+          >
+            <Pin className="h-3.5 w-3.5" /> {pinned ? "Закреплена" : "Закрепить"}
+          </button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            {note ? <FileUploader parent={{ noteId: note.id }} compact /> : null}
+            {note ? (
+              <Button type="button" variant="ghost" size="icon-sm" className="hover:text-danger" onClick={() => setConfirm(true)} aria-label="Удалить">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ) : null}
+            <Button type="button" size="sm" onClick={save} loading={busy}>
+              {note ? "Сохранить" : "Создать"}
+            </Button>
+          </div>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={saveMeta}>
-          Сохранить
-        </Button>
-        {note ? <FileUploader parent={{ noteId: note.id }} compact /> : null}
-        {note ? (
-          <Button type="button" variant="danger" onClick={() => setConfirm(true)}>
-            Удалить
-          </Button>
-        ) : null}
-      </div>
+
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}
@@ -181,7 +238,6 @@ export function NoteEditor({
           setConfirm(false);
           toast.push("Заметка удалена");
           router.push("/notes");
-          router.refresh();
         }}
       />
     </div>

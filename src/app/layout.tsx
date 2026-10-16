@@ -1,20 +1,27 @@
-import type { Metadata } from "next";
-import { Outfit, Literata } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const outfit = Outfit({ subsets: ["latin", "latin-ext"], variable: "--font-outfit" });
-const literata = Literata({ subsets: ["latin"], variable: "--font-literata" });
+// Inter поддерживает кириллицу (прежний Outfit — нет, и русский текст падал в системный шрифт)
+const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-sans", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "StudyHub — подготовка к сессии",
-  description: "Предметы, вопросы, задачи и календарь для студента",
+  title: { default: "StudyHub", template: "%s · StudyHub" },
+  description: "Предметы, вопросы, задачи и календарь для подготовки к сессии",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8f8fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d0d12" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={`${outfit.variable} ${literata.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} font-sans`}>
         <Providers>{children}</Providers>
       </body>
     </html>
