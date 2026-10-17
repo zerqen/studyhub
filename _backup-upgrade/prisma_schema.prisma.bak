@@ -1,0 +1,438 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  name              String
+  avatarPath        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  resetTokenHash    String?
+  resetTokenExpires DateTime?
+  deadlineCheckedAt DateTime?
+
+  subjects          Subject[]
+  tasks             Task[]
+  subtasks          Subtask[]
+  tickets           Ticket[]
+  questions         Question[]
+  notes             Note[]
+  attachments       Attachment[]
+  tags              Tag[]
+  events            CalendarEvent[]
+  comments          TaskComment[]
+  contextualComments Comment[]
+  notifications     Notification[]
+  questionAttempts  QuestionAttempt[]
+  progressLogs      ProgressLog[]
+  lectures          Lecture[]
+
+  @@index([email])
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  color       String   @default("#0f8f7a")
+  emoji       String   @default("📘")
+  teacher     String?
+  description String?
+  type        String   @default("EXAM")
+  examDate    DateTime?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks       Task[]
+  tickets     Ticket[]
+  questions   Question[]
+  notes       Note[]
+  attachments Attachment[]
+  events      CalendarEvent[]
+  progressLogs ProgressLog[]
+  lectures    Lecture[]
+
+  @@index([userId])
+  @@index([userId, archived])
+  @@index([userId, examDate])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  dueTime     String?
+  priority    String    @default("MEDIUM")
+  status      String    @default("PLANNED")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  subtasks    Subtask[]
+  notes       Note[]
+  attachments Attachment[]
+  comments    TaskComment[]
+  contextualComments Comment[]
+  questions   Question[]
+  tags        TaskTag[]
+  events      CalendarEvent[]
+
+  @@index([userId])
+  @@index([userId, dueDate])
+  @@index([userId, status])
+  @@index([userId, priority])
+  @@index([subjectId])
+  @@index([title])
+}
+
+model Subtask {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Subtask?  @relation("SubtaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Subtask[] @relation("SubtaskTree")
+  title     String
+  status    String    @default("PLANNED")
+  dueDate   DateTime?
+  note      String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  attachments Attachment[]
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([parentId])
+  @@index([status])
+}
+
+model Ticket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String   @default("NOT_STARTED")
+  priority    String   @default("MEDIUM")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions   Question[]
+  notes       Note[]
+  attachments Attachment[]
+  tags        TicketTag[]
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([status])
+  @@index([title])
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticketId    String?
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  text        String
+  answer      String?
+  explanation String?
+  status      String   @default("UNLEARNED")
+  difficulty  String   @default("MEDIUM")
+  sortOrder   Int      @default(0)
+  lectureId   String?
+  lecture     Lecture? @relation(fields: [lectureId], references: [id], onDelete: SetNull)
+  // Интервальное повторение (SM-2)
+  srsDue      DateTime?
+  srsInterval Int      @default(0)
+  srsEase     Float    @default(2.5)
+  srsReps     Int      @default(0)
+  srsLapses   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  notes       Note[]
+  attachments Attachment[]
+  tags        QuestionTag[]
+  attempts    QuestionAttempt[]
+  comments    Comment[]
+  tasks       Task[]
+
+  @@index([userId])
+  @@index([ticketId])
+  @@index([subjectId])
+  @@index([status])
+  @@index([difficulty])
+  @@index([text])
+  @@index([userId, srsDue])
+  @@index([lectureId])
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  ticketId    String?
+  ticket      Ticket?   @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  questionId  String?
+  question    Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  title       String
+  content     String    @default("")
+  color       String    @default("#fde68a")
+  pinned      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  attachments Attachment[]
+  tags        NoteTag[]
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([pinned])
+  @@index([title])
+  @@index([updatedAt])
+}
+
+model Attachment {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  storagePath  String
+  subjectId    String?
+  subject      Subject?  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  taskId       String?
+  task         Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  subtaskId    String?
+  subtask      Subtask?  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  ticketId     String?
+  ticket       Ticket?   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  questionId   String?
+  question     Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  noteId       String?
+  note         Note?     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  commentId      String?
+  comment        Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  lectureId    String?
+  lecture      Lecture?  @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([taskId])
+  @@index([commentId])
+  @@index([lectureId])
+  @@index([originalName])
+}
+
+model Tag {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+  color  String @default("#64748b")
+
+  tasks     TaskTag[]
+  notes     NoteTag[]
+  questions QuestionTag[]
+  tickets   TicketTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model TaskTag {
+  taskId String
+  tagId  String
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+}
+
+model NoteTag {
+  noteId String
+  tagId  String
+  note   Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+model QuestionTag {
+  questionId String
+  tagId      String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+}
+
+model TicketTag {
+  ticketId String
+  tagId    String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+}
+
+model CalendarEvent {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject?  @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime?
+  allDay      Boolean   @default(true)
+  color       String?
+  // LECTURE | SEMINAR | LAB | TEST | CONSULT | EXAM | OTHER
+  kind        String    @default("OTHER")
+  location    String?
+  // null | WEEKLY | BIWEEKLY
+  recurrence  String?
+  repeatUntil DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, startAt])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Comment {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId     String?
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  questionId String?
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content    String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  attachments Attachment[]
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([questionId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  href      String?
+  read      Boolean  @default(false)
+  kind      String   @default("info")
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model QuestionAttempt {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  knew       Boolean
+  // 0 — забыл, 1 — трудно, 2 — хорошо, 3 — легко
+  grade      Int?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([userId, createdAt])
+}
+
+model ProgressLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  type      String
+  value     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Lecture {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  number    Int?
+  title     String
+  date      DateTime?
+  summary   String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  questions   Question[]
+  attachments Attachment[]
+
+  @@index([userId])
+  @@index([subjectId, date])
+}
+
+// Счётчики для ограничения частоты (вход, фоновые пересчёты) — общие для всех инстансов сервера
+model RateLimit {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+}

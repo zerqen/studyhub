@@ -86,7 +86,29 @@
 
 /* Markdown внутри заметок */
 .prose-note {
-  @apply text-[15px] leading-relaxed;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-inline p {
+  display: inline;
+}
+.prose-note .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+.prose-note table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-note th,
+.prose-note td {
+  @apply border border-line px-2 py-1 text-left;
+}
+.prose-note img {
+  @apply max-h-96 rounded-xl;
+}
+.prose-note hr {
+  @apply my-4 border-line;
 }
 .prose-note > * + * {
   margin-top: 0.6em;
@@ -132,4 +154,15 @@
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* Печать шпаргалки */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
 }

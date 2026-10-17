@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpRight, FileJson, MoreHorizontal, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, Image as ImageIcon, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
 import { archiveSubject, deleteSubject } from "@/actions/subjects";
+import { reorderQuestions } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, SUBJECT_TYPES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
 import { cn, daysUntil, formatDate, isOverdue } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -20,6 +21,11 @@ import { NoteEditor } from "../notes/note-editor";
 import { FileUploader } from "../files/uploader";
 import { FileGrid } from "../files/file-grid";
 import { StudyMode, type StudyQuestion } from "../study/study-mode";
+import { Markdown } from "../ui/markdown";
+import { LectureForm } from "../lectures/lecture-form";
+import { QuestionGenerator } from "../ai/question-generator";
+import { useAiEnabled } from "../ai/use-ai";
+import { Segmented } from "../ui/page";
 
 export type SubjectData = {
   id: string;
@@ -35,10 +41,12 @@ export type SubjectData = {
   tasks: { id: string; title: string; status: string; priority: string; dueDate: string | null }[];
   notes: { id: string; title: string; content: string; color: string; updatedAt: string }[];
   attachments: { id: string; originalName: string; mimeType: string; size: number }[];
+  lectures: { id: string; number: number | null; title: string; date: string | null; questions: number; photos: number; media: number }[];
 };
 
 const tabs = [
   ["questions", "Вопросы"],
+  ["lectures", "Лекции"],
   ["study", "Тренировка"],
   ["tasks", "Задачи"],
   ["notes", "Заметки"],
@@ -61,10 +69,15 @@ export function SubjectWorkspace({
   taskProgress: number;
 }) {
   const [tab, setTabState] = useState<Tab>(tabs.some(([id]) => id === initialTab) ? (initialTab as Tab) : "questions");
-  const [open, setOpen] = useState<null | "edit" | "question" | "import" | "task" | "note">(null);
+  const [open, setOpen] = useState<null | "edit" | "question" | "import" | "task" | "note" | "lecture">(null);
+  // Порядок вопросов можно менять перетаскиванием — держим его локально
+  const [order, setOrder] = useState<string[] | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [del, setDel] = useState(false);
   const [qFilter, setQFilter] = useState<string>("all");
+  const [importMode, setImportMode] = useState<"ai" | "json">("ai");
+  const ai = useAiEnabled();
   const router = useRouter();
   const toast = useToast();
   const d = daysUntil(subject.examDate || null);
@@ -78,12 +91,35 @@ export function SubjectWorkspace({
   }
 
   const learned = subject.questions.filter((q) => q.status === "LEARNED").length;
-  const shownQuestions = useMemo(
-    () => (qFilter === "all" ? subject.questions : subject.questions.filter((q) => q.status === qFilter)),
-    [qFilter, subject.questions],
-  );
+  const ordered = useMemo(() => {
+    if (!order) return subject.questions;
+    const byId = new Map(subject.questions.map((q) => [q.id, q]));
+    const list = order.map((id) => byId.get(id)).filter((q): q is StudyQuestion => Boolean(q));
+    // новые вопросы, которых ещё нет в локальном порядке — в конец
+    return [...list, ...subject.questions.filter((q) => !order.includes(q.id))];
+  }, [order, subject.questions]);
+  const numberOf = useMemo(() => new Map(ordered.map((q, i) => [q.id, i + 1])), [ordered]);
+  const shownQuestions = useMemo(() => (qFilter === "all" ? ordered : ordered.filter((q) => q.status === qFilter)), [qFilter, ordered]);
+  const canDrag = qFilter === "all" && ordered.length > 1;
+
+  function moveOver(targetId: string) {
+    if (!dragId || dragId === targetId) return;
+    const ids = ordered.map((q) => q.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    setOrder(ids);
+  }
+
+  async function saveOrder() {
+    setDragId(null);
+    if (!order) return;
+    const r = await reorderQuestions(subject.id, order);
+    if (!r.ok) toast.push(r.error, "err");
+  }
   const counts: Record<Tab, number | null> = {
     questions: subject.questions.length,
+    lectures: subject.lectures.length,
     study: null,
     tasks: subject.tasks.length,
     notes: subject.notes.length,
@@ -118,6 +154,15 @@ export function SubjectWorkspace({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href={`/subjects/${subject.id}/exam`}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-medium transition-colors hover:bg-subtle"
+              title="Билет, подготовка, вопросы препода и оценка"
+            >
+              <GraduationCap className="h-4 w-4 text-accent" />
+              <span className="hidden sm:inline">Пробный экзамен</span>
+              <span className="sm:hidden">Экзамен</span>
+            </Link>
             <div className="relative">
               <ProgressRing value={progress} color={subject.color} size={52} stroke={5} />
               <span className="absolute inset-0 grid place-items-center text-xs font-semibold tabular-nums">{progress}%</span>
@@ -132,6 +177,9 @@ export function SubjectWorkspace({
                   <div className="absolute right-0 z-40 mt-1 w-48 animate-pop-in overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-pop">
                     <MenuItem icon={Pencil} onClick={() => { setMenu(false); setOpen("edit"); }}>
                       Редактировать
+                    </MenuItem>
+                    <MenuItem icon={Printer} onClick={() => { setMenu(false); window.open(`/subjects/${subject.id}/print`, "_blank"); }}>
+                      Шпаргалка для печати
                     </MenuItem>
                     <MenuItem
                       icon={subject.archived ? ArchiveRestore : Archive}
@@ -223,16 +271,38 @@ export function SubjectWorkspace({
               </div>
               <ol className="card divide-y divide-line overflow-hidden">
                 {shownQuestions.map((q) => (
-                  <li key={q.id}>
-                    <Link href={`/questions/${q.id}`} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-subtle/60">
-                      <span className="mt-0.5 w-6 shrink-0 text-right text-xs tabular-nums text-muted">{subject.questions.indexOf(q) + 1}</span>
+                  <li
+                    key={q.id}
+                    draggable={canDrag}
+                    onDragStart={(e) => {
+                      setDragId(q.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      if (!dragId) return;
+                      e.preventDefault();
+                      moveOver(q.id);
+                    }}
+                    onDragEnd={() => void saveOrder()}
+                    className={cn("group/row relative", dragId === q.id && "opacity-40")}
+                  >
+                    {canDrag ? (
+                      <GripVertical className="absolute left-1 top-3.5 hidden h-4 w-4 cursor-grab text-muted/60 opacity-0 transition-opacity group-hover/row:opacity-100 sm:block" />
+                    ) : null}
+                    <Link href={`/questions/${q.id}`} draggable={false} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-subtle/60">
+                      <span className="mt-0.5 w-6 shrink-0 text-right text-xs tabular-nums text-muted">{numberOf.get(q.id)}</span>
                       <span className="min-w-0 flex-1">
-                        <span className="line-clamp-2 text-sm leading-snug">{q.text}</span>
+                        <span className="line-clamp-2 text-sm leading-snug">
+                          <Markdown inline>{q.text}</Markdown>
+                        </span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <Badge tone={questionStatusTone(q.status)} dot>
                             {labelOf(QUESTION_STATUSES, q.status)}
                           </Badge>
+                          {q.kind === "PROBLEM" ? <Badge tone="accent">задача</Badge> : null}
                           {q.difficulty !== "MEDIUM" ? <Badge>{labelOf(DIFFICULTIES, q.difficulty)}</Badge> : null}
+                          {q.ticketNo ? <span className="text-xs text-muted">билет {q.ticketNo}</span> : null}
+                          {q.lecture ? <span className="text-xs text-muted">лекция {q.lecture.number ?? ""}</span> : null}
                           {!q.answer ? <span className="text-xs text-muted">без ответа</span> : null}
                         </span>
                       </span>
@@ -247,7 +317,73 @@ export function SubjectWorkspace({
         </section>
       )}
 
-      {tab === "study" && <StudyMode questions={subject.questions} color={subject.color} />}
+      {tab === "lectures" && (
+        <section>
+          <div className="mb-4 flex justify-end">
+            <Button onClick={() => setOpen("lecture")}>
+              <Plus className="h-4 w-4" /> Лекция
+            </Button>
+          </div>
+          {subject.lectures.length === 0 ? (
+            <EmptyState
+              title="Лекций пока нет"
+              hint="Для каждой лекции можно хранить запись, фото страниц тетради, конспект с формулами и вопросы по ней."
+              action={
+                <Button onClick={() => setOpen("lecture")}>
+                  <Plus className="h-4 w-4" /> Первая лекция
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="card divide-y divide-line overflow-hidden">
+              {subject.lectures.map((l) => (
+                <li key={l.id}>
+                  <Link href={`/lectures/${l.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-subtle/60">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-sm font-semibold tabular-nums" style={{ background: `${subject.color}1a`, color: subject.color }}>
+                      {l.number ?? "·"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{l.title}</span>
+                      <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted">
+                        {l.date ? <span>{formatDate(l.date, "d MMMM")}</span> : null}
+                        {l.media ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Headphones className="h-3 w-3" /> запись
+                          </span>
+                        ) : null}
+                        {l.photos ? (
+                          <span className="inline-flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> {l.photos} фото
+                          </span>
+                        ) : null}
+                        {l.questions ? <span>{l.questions} вопросов</span> : null}
+                      </span>
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-muted" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {tab === "study" && (
+        <>
+          <Link
+            href={`/subjects/${subject.id}/exam`}
+            className="card card-hover mx-auto mb-4 flex max-w-3xl items-center gap-3 px-4 py-3"
+          >
+            <GraduationCap className="h-5 w-5 shrink-0 text-accent" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Пробный экзамен</span>
+              <span className="block text-xs text-muted">Билет из теории и задач, таймер подготовки, вопросы препода — и оценка</span>
+            </span>
+            <ArrowUpRight className="h-4 w-4 shrink-0 text-muted" />
+          </Link>
+          <StudyMode questions={ordered} color={subject.color} />
+        </>
+      )}
 
       {tab === "tasks" && (
         <section>
@@ -313,7 +449,7 @@ export function SubjectWorkspace({
         <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
           <div className="card p-5">
             <div className="label-xs mb-2">Описание</div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{subject.description || <span className="text-muted">Описания пока нет.</span>}</p>
+            {subject.description ? <Markdown className="text-sm">{subject.description}</Markdown> : <p className="text-sm text-muted">Описания пока нет.</p>}
             <Button variant="secondary" size="sm" className="mt-4" onClick={() => setOpen("edit")}>
               <Pencil className="h-3.5 w-3.5" /> Изменить
             </Button>
@@ -359,10 +495,34 @@ export function SubjectWorkspace({
         />
       </Modal>
       <Modal open={open === "question"} onClose={() => setOpen(null)} title="Новый вопрос">
-        <QuestionForm subjectId={subject.id} onDone={() => setOpen(null)} />
+        <QuestionForm subjectId={subject.id} lectures={subject.lectures} onDone={() => setOpen(null)} />
       </Modal>
-      <Modal open={open === "import"} onClose={() => setOpen(null)} title="Импорт вопросов" description="Вставь JSON-массив — вопросы добавятся в конец списка" className="sm:max-w-2xl">
-        <QuestionImport subjectId={subject.id} onDone={() => setOpen(null)} />
+      <Modal open={open === "lecture"} onClose={() => setOpen(null)} title="Новая лекция">
+        <LectureForm subjectId={subject.id} onDone={() => setOpen(null)} />
+      </Modal>
+      <Modal
+        open={open === "import"}
+        onClose={() => setOpen(null)}
+        title="Добавить вопросы списком"
+        description={importMode === "ai" ? "Вставь конспект или методичку — ИИ составит вопросы с ответами" : "Вставь JSON-массив — вопросы добавятся в конец списка"}
+        className="sm:max-w-2xl"
+      >
+        {ai ? (
+          <Segmented
+            value={importMode}
+            onChange={setImportMode}
+            options={[
+              ["ai", "Из текста (ИИ)"],
+              ["json", "JSON"],
+            ]}
+            className="mb-4 w-full [&>button]:flex-1"
+          />
+        ) : null}
+        {open === "import" && ai && importMode === "ai" ? (
+          <QuestionGenerator subjectId={subject.id} onDone={() => setOpen(null)} />
+        ) : (
+          <QuestionImport subjectId={subject.id} onDone={() => setOpen(null)} />
+        )}
       </Modal>
       <Modal open={open === "task"} onClose={() => setOpen(null)} title="Новая задача">
         <TaskForm subjects={[{ id: subject.id, name: subject.name }]} initial={{ subjectId: subject.id }} onDone={() => setOpen(null)} />

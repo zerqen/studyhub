@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Download, ExternalLink, File, FileArchive, FileAudio, FileImage, FileText, Trash2 } from "lucide-react";
 import { deleteAttachment } from "@/actions/attachments";
-import { ConfirmDialog } from "../ui/modal";
 import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +27,24 @@ function ext(name: string) {
 }
 
 export function FileGrid({ files, compact }: { files: FileItem[]; compact?: boolean }) {
-  const [del, setDel] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const toast = useToast();
   const visible = files.filter((f) => !hidden.has(f.id));
+
+  function setDel(id: string) {
+    const f = files.find((x) => x.id === id);
+    toast.undoable({
+      text: `Файл «${(f?.originalName ?? "").slice(0, 30)}» удалён`,
+      hide: () => setHidden((s) => new Set(s).add(id)),
+      restore: () =>
+        setHidden((s) => {
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        }),
+      commit: () => deleteAttachment(id),
+    });
+  }
 
   if (!visible.length) return compact ? null : <p className="text-sm text-muted">Файлов пока нет.</p>;
 
@@ -52,7 +65,6 @@ export function FileGrid({ files, compact }: { files: FileItem[]; compact?: bool
             </li>
           );
         })}
-        <Confirm del={del} setDel={setDel} onDeleted={(id) => setHidden((s) => new Set(s).add(id))} toast={toast} />
       </ul>
     );
   }
@@ -101,38 +113,7 @@ export function FileGrid({ files, compact }: { files: FileItem[]; compact?: bool
           );
         })}
       </div>
-      <Confirm del={del} setDel={setDel} onDeleted={(id) => setHidden((s) => new Set(s).add(id))} toast={toast} />
     </>
   );
 }
 
-function Confirm({
-  del,
-  setDel,
-  onDeleted,
-  toast,
-}: {
-  del: string | null;
-  setDel: (v: string | null) => void;
-  onDeleted: (id: string) => void;
-  toast: ReturnType<typeof useToast>;
-}) {
-  return (
-    <ConfirmDialog
-      open={!!del}
-      onClose={() => setDel(null)}
-      title="Удалить файл?"
-      text="Файл будет удалён безвозвратно."
-      onConfirm={async () => {
-        if (!del) return;
-        const res = await deleteAttachment(del);
-        if (!res.ok) toast.push(res.error, "err");
-        else {
-          onDeleted(del);
-          toast.push("Файл удалён");
-        }
-        setDel(null);
-      }}
-    />
-  );
-}

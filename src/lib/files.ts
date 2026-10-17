@@ -2,13 +2,14 @@ import { mkdir, writeFile, unlink } from "fs/promises";
 import path from "path";
 import { nanoid } from "nanoid";
 import { del, put } from "@vercel/blob";
-import { ALLOWED_MIME, MAX_FILE_SIZE } from "./constants";
+import { ALLOWED_MIME, maxServerSize } from "./constants";
 
 export const uploadRoot = path.join(process.cwd(), "uploads");
 
 export async function saveUpload(file: File) {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error("Файл больше 15 МБ");
+  const limit = maxServerSize(file.type);
+  if (file.size > limit) {
+    throw new Error(`Файл больше ${limit / 1024 / 1024} МБ`);
   }
   if (!ALLOWED_MIME.has(file.type)) {
     throw new Error("Этот тип файла не поддерживается");

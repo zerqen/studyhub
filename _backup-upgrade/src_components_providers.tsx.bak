@@ -1,0 +1,45 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { SessionProvider } from "next-auth/react";
+import { ThemeProvider } from "next-themes";
+import { ToastProvider } from "./ui/toast";
+import { PwaRegister } from "./pwa";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  // Переключаем флаг в true сразу после загрузки страницы на клиенте
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <SessionProvider refetchOnWindowFocus={false}>
+      {/* 
+        Монтируем ThemeProvider только на клиенте.
+        Это полностью предотвратит появление тега <script> на этапе SSR, 
+        и Turbopack больше не будет выкидывать ошибку сборки.
+      */}
+      {mounted ? (
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          themes={["light", "dark"]}
+          disableTransitionOnChange
+        >
+          <ToastProvider>
+            {children}
+            <PwaRegister />
+          </ToastProvider>
+        </ThemeProvider>
+      ) : (
+        /* Временная легкая обертка для этапа серверного рендеринга */
+        <ToastProvider>
+          {children}
+        </ToastProvider>
+      )}
+    </SessionProvider>
+  );
+}

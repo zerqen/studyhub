@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
         const ip =
           (req as { headers?: { "x-forwarded-for"?: string } })?.headers?.["x-forwarded-for"] ??
           "local";
-        if (!consumeLoginAttempt(`${ip}:${parsed.data.email}`)) {
+        if (!(await consumeLoginAttempt(`${ip}:${parsed.data.email}`))) {
           throw new Error("Слишком много попыток. Подождите минуту.");
         }
         const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });

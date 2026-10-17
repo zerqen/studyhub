@@ -7,8 +7,9 @@ import { addComment, deleteComment, updateComment } from "@/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/field";
-import { ConfirmDialog } from "../ui/modal";
 import { FileGrid } from "../files/file-grid";
+import { uploadFile } from "../files/uploader";
+import { Markdown } from "../ui/markdown";
 import { useToast } from "../ui/toast";
 
 type Comment = {
@@ -19,19 +20,7 @@ type Comment = {
 };
 
 function CommentText({ content }: { content: string }) {
-  return (
-    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-      {content.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
-        /^https?:\/\//.test(part) ? (
-          <a key={index} href={part} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
-    </p>
-  );
+  return <Markdown className="text-sm">{content}</Markdown>;
 }
 
 export function CommentThread({ taskId, questionId, comments }: { taskId?: string; questionId?: string; comments: Comment[] }) {
@@ -40,7 +29,8 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const visible = comments.filter((c) => !hidden.has(c.id));
   const toast = useToast();
   const router = useRouter();
 
@@ -55,16 +45,7 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
     }
     if (files.length && result.data?.id) {
       try {
-        await Promise.all(
-          files.map(async (file) => {
-            const form = new FormData();
-            form.set("file", file);
-            form.set("commentId", result.data!.id);
-            const response = await fetch("/api/upload", { method: "POST", body: form });
-            const upload = await response.json();
-            if (!upload.ok) throw new Error(upload.error ?? "Не удалось прикрепить файл");
-          }),
-        );
+        await Promise.all(files.map((file) => uploadFile(file, { commentId: result.data!.id })));
         router.refresh();
       } catch (error) {
         toast.push(error instanceof Error ? error.message : "Комментарий добавлен, но файл не загрузился", "err");
@@ -87,12 +68,12 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
   return (
     <section>
       <h2 className="mb-3 text-sm font-semibold">
-        Комментарии {comments.length ? <span className="font-normal text-muted">{comments.length}</span> : null}
+        Комментарии {visible.length ? <span className="font-normal text-muted">{visible.length}</span> : null}
       </h2>
 
-      {comments.length ? (
+      {visible.length ? (
         <ul className="mb-3 space-y-3">
-          {comments.map((comment) => (
+          {visible.map((comment) => (
             <li key={comment.id} className="card group p-4">
               <div className="mb-1.5 flex items-center gap-2 text-xs text-muted">
                 <span>{formatDate(comment.createdAt, "d MMMM, HH:mm")}</span>
@@ -107,7 +88,22 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
                     >
                       Изменить
                     </button>
-                    <button className="hover:text-danger" onClick={() => setDeleting(comment.id)}>
+                    <button
+                      className="hover:text-danger"
+                      onClick={() =>
+                        toast.undoable({
+                          text: "Комментарий удалён",
+                          hide: () => setHidden((h) => new Set(h).add(comment.id)),
+                          restore: () =>
+                            setHidden((h) => {
+                              const n = new Set(h);
+                              n.delete(comment.id);
+                              return n;
+                            }),
+                          commit: () => deleteComment(comment.id),
+                        })
+                      }
+                    >
                       Удалить
                     </button>
                   </span>
@@ -145,7 +141,7 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void submit();
           }}
-          placeholder="Мысль, ссылка или вопрос к себе…"
+          placeholder="Мысль, ссылка или формула $x^2$… (Ctrl+Enter — отправить)"
           rows={2}
           className="w-full resize-none bg-transparent px-1 text-sm leading-relaxed outline-none placeholder:text-muted"
         />
@@ -172,18 +168,6 @@ export function CommentThread({ taskId, questionId, comments }: { taskId?: strin
         </div>
       </div>
 
-      <ConfirmDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        title="Удалить комментарий?"
-        text="Комментарий и прикреплённые к нему файлы будут удалены."
-        onConfirm={async () => {
-          if (!deleting) return;
-          const result = await deleteComment(deleting);
-          if (!result.ok) toast.push(result.error, "err");
-          setDeleting(null);
-        }}
-      />
     </section>
   );
 }

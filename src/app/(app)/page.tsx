@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BookOpen, CalendarClock, CheckCircle2, CircleDot, GraduationCap, Pin } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpen, Brain, CalendarClock, CheckCircle2, GraduationCap, Pin } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getDashboard } from "@/lib/queries";
 import { daysUntil, formatDate } from "@/lib/utils";
@@ -7,6 +7,9 @@ import { ProgressBar } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { QuickCreate } from "@/components/dashboard/quick-create";
 import { Section } from "@/components/ui/page";
+import { ActivityHeatmap } from "@/components/dashboard/activity";
+import { TodayLessons } from "@/components/dashboard/today-lessons";
+import { kindMeta } from "@/lib/schedule";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("ru-RU", { hour: "numeric", timeZone: "Europe/Moscow" }).format(new Date()));
@@ -59,7 +62,16 @@ export default async function DashboardPage() {
           total={data.totalTasks}
           progress={data.totalTasks ? (data.doneTasks / data.totalTasks) * 100 : 0}
         />
-        <Stat icon={CircleDot} label="Нужно повторить" value={data.reviewQuestions} hint="вопросов" />
+        <Link href="/review" className="card card-hover p-4">
+          <div className="flex items-center gap-2 text-[13px] text-muted">
+            <Brain className="h-4 w-4" /> К повторению
+          </div>
+          <div className="mt-2 flex items-baseline gap-1">
+            <span className={`text-2xl font-semibold tabular-nums tracking-tight ${data.dueCount ? "text-accent" : ""}`}>{data.dueCount}</span>
+            <span className="text-sm text-muted">{data.newCount ? `+ ${data.newCount} новых` : "сегодня"}</span>
+          </div>
+          <div className="mt-1 text-xs font-medium text-accent">{data.dueCount || data.newCount ? "Начать →" : "всё повторено"}</div>
+        </Link>
         {nextExam ? (
           <Link href={`/subjects/${nextExam.id}`} className="card card-hover p-4">
             <div className="flex items-center gap-2 text-[13px] text-muted">
@@ -118,6 +130,23 @@ export default async function DashboardPage() {
         </Section>
 
         <div className="space-y-4">
+          {data.todayEvents.length ? (
+            <Section title="Сегодня по расписанию" bodyClassName="p-1.5">
+              <TodayLessons
+                lessons={data.todayEvents.map((e) => ({
+                  key: e.key,
+                  title: e.title,
+                  kind: e.kind,
+                  start: e.start.toISOString(),
+                  allDay: e.allDay,
+                  location: e.location,
+                  color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
+                  subjectId: e.subjectId,
+                }))}
+                homework={data.homework}
+              />
+            </Section>
+          ) : null}
           <Section title="Экзамены" bodyClassName="p-1.5">
             {data.exams.length === 0 ? (
               <p className="px-3 py-4 text-sm text-muted">Добавь дату экзамена в карточке предмета — здесь появится обратный отсчёт.</p>
@@ -168,6 +197,8 @@ export default async function DashboardPage() {
           ) : null}
         </div>
       </div>
+
+      <ActivityHeatmap activity={data.activity} />
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -239,7 +270,7 @@ function TaskRow({
   overdue,
   showDate,
 }: {
-  task: { id: string; title: string; dueDate: Date | null; dueTime: string | null; subject: { name: string; color: string } | null };
+  task: { id: string; title: string; dueDate: Date | null; dueTime: string | null; kind?: string; subject: { name: string; color: string } | null };
   overdue?: boolean;
   showDate?: boolean;
 }) {
@@ -251,7 +282,10 @@ function TaskRow({
         ) : (
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: task.subject?.color ?? "rgb(var(--muted))" }} />
         )}
-        <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {task.kind === "HOMEWORK" ? <span className="mr-1.5 rounded bg-accent/10 px-1 text-[10px] font-semibold text-accent">ДЗ</span> : null}
+          {task.title}
+        </span>
         {task.subject ? <span className="hidden truncate text-xs text-muted sm:block sm:max-w-[10rem]">{task.subject.name}</span> : null}
         <span className={`shrink-0 text-xs tabular-nums ${overdue ? "font-medium text-danger" : "text-muted"}`}>
           {overdue ? formatDate(task.dueDate, "d MMM") : showDate ? formatDate(task.dueDate, "d MMM") : task.dueTime ?? "сегодня"}

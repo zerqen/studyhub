@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/* 1. Настройка темы для Tailwind v4 */
+@theme {
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-subtle: rgb(var(--subtle));
+  --color-line: rgb(var(--line));
+  --color-fg: rgb(var(--fg));
+  --color-muted: rgb(var(--muted));
+  --color-accent: rgb(var(--accent));
+  --color-accent-fg: rgb(var(--accent-fg));
+  --color-accent-soft: rgb(var(--accent-soft));
+  --color-success: rgb(var(--success));
+  --color-warning: rgb(var(--warning));
+  --color-danger: rgb(var(--danger));
+}
+
+/* 2. Ваши CSS-переменные (каналы RGB) */
+:root {
+  --bg: 248 248 250;
+  --surface: 255 255 255;
+  --subtle: 243 244 246;
+  --line: 228 228 234;
+  --fg: 17 17 27;
+  --muted: 107 109 124;
+  --accent: 79 70 229;
+  --accent-fg: 255 255 255;
+  --accent-soft: 238 237 254;
+  --success: 22 163 74;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 13 13 18;
+  --surface: 22 22 29;
+  --subtle: 32 32 41;
+  --line: 44 44 56;
+  --fg: 236 236 241;
+  --muted: 150 151 166;
+  --accent: 129 120 255;
+  --accent-fg: 255 255 255;
+  --accent-soft: 37 35 70;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  color-scheme: dark;
+}
+
+/* 3. Базовые стили (в v4 пишутся как обычный CSS) */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  @apply bg-bg text-fg antialiased;
+  min-height: 100dvh;
+  font-feature-settings: "cv11", "ss01";
+}
+::selection {
+  @apply bg-accent/20;
+}
+:focus-visible {
+  @apply outline-none ring-2 ring-accent/40 ring-offset-0;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+input[type="checkbox"] {
+  accent-color: rgb(var(--accent));
+}
+
+/* 4. Компоненты (кастомные утилиты) */
+@utility card {
+  @apply rounded-2xl border border-line bg-surface;
+}
+@utility card-hover {
+  @apply transition-colors duration-150 hover:border-fg/20;
+}
+@utility label-xs {
+  @apply text-xs font-medium uppercase tracking-wide text-muted;
+}
+@utility skeleton {
+  @apply animate-[pulse_1.6s_ease-in-out_infinite] rounded-lg bg-subtle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Markdown внутри заметок */
+.prose-note {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-inline p {
+  display: inline;
+}
+.prose-note .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+.prose-note table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-note th,
+.prose-note td {
+  @apply border border-line px-2 py-1 text-left;
+}
+.prose-note img {
+  @apply max-h-96 rounded-xl;
+}
+.prose-note hr {
+  @apply my-4 border-line;
+}
+.prose-note > * + * {
+  margin-top: 0.6em;
+}
+.prose-note h1 {
+  @apply text-xl font-semibold;
+}
+.prose-note h2 {
+  @apply text-lg font-semibold;
+}
+.prose-note h3 {
+  @apply font-semibold;
+}
+.prose-note ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-note ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.prose-note a {
+  @apply text-accent underline underline-offset-2;
+}
+.prose-note code {
+  @apply rounded bg-subtle px-1 py-0.5 font-mono text-[0.9em];
+}
+.prose-note pre {
+  @apply overflow-x-auto rounded-xl bg-subtle p-3;
+}
+.prose-note pre code {
+  @apply bg-transparent p-0;
+}
+.prose-note blockquote {
+  @apply border-l-2 border-accent pl-3 text-muted;
+}
+.prose-note input[type="checkbox"] {
+  margin-right: 0.4rem;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Печать шпаргалки */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}

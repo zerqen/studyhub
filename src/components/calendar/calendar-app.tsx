@@ -17,14 +17,18 @@ import { ru } from "date-fns/locale";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, ChevronLeft, ChevronRight, GraduationCap, Plus } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, FileUp, GraduationCap, MapPin, Plus } from "lucide-react";
 import { isOverdue, cn } from "@/lib/utils";
 import { moveTaskDate } from "@/actions/tasks";
-import { createEvent } from "@/actions/events";
 import { Modal } from "../ui/modal";
 import { TaskForm } from "../tasks/task-form";
 import { Button } from "../ui/button";
-import { Field, Input, Select } from "../ui/field";
+import { Select } from "../ui/field";
+import { EventForm, type EditableEvent } from "./event-form";
+import { ScheduleImport } from "./schedule-import";
+import { expandEvents, kindMeta, weekParity } from "@/lib/schedule";
+import { isAssignedAt, isDueAt } from "@/lib/homework";
+import { HomeworkPanel } from "./homework-panel";
 import { Segmented } from "../ui/page";
 import { useToast } from "../ui/toast";
 
@@ -36,11 +40,34 @@ export type CalTask = {
   status: string;
   subjectId: string | null;
   subject: { id: string; name: string; color: string } | null;
+  kind?: string;
+  dueTime?: string | null;
+  lessonAt?: string | null;
 };
 export type CalExam = { id: string; name: string; color: string; examDate: string | null };
-export type CalEvent = { id: string; title: string; startAt: string; color: string | null; subject: { color: string } | null };
+export type CalEvent = EditableEvent & { color: string | null; subject: { name: string; color: string } | null };
 
-type Item = { kind: "exam" | "task" | "event"; id: string; title: string; color: string; href?: string; done?: boolean; overdue?: boolean };
+type Sync = { url: string | null; syncedAt: string | null };
+
+type Item = {
+  kind: "exam" | "task" | "event";
+  id: string;
+  title: string;
+  color: string;
+  href?: string;
+  done?: boolean;
+  overdue?: boolean;
+  time?: string;
+  sort: number;
+  event?: CalEvent;
+  /** Начало конкретного повтора пары */
+  start?: string;
+  meta?: string;
+  /** К паре надо сдать домашку */
+  homework?: number;
+};
+
+const hhmm = (d: Date) => format(d, "HH:mm");
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
@@ -49,23 +76,25 @@ export function CalendarApp({
   exams,
   events,
   subjects,
+  sync = { url: null, syncedAt: null },
 }: {
   tasks: CalTask[];
   exams: CalExam[];
   events: CalEvent[];
   subjects: { id: string; name: string }[];
+  sync?: Sync;
 }) {
+  const [importOpen, setImportOpen] = useState(false);
   const [cursor, setCursor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => startOfDay(new Date()));
   const [view, setView] = useState<"month" | "week">("month");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [createOn, setCreateOn] = useState<string | null>(null);
-  const [eventOpen, setEventOpen] = useState(false);
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventDate, setEventDate] = useState("");
+  const [eventOpen, setEventOpen] = useState<null | { event?: CalEvent; date?: string; start?: string }>(null);
   const [moved, setMoved] = useState<Record<string, string>>({});
   const toast = useToast();
   const router = useRouter();
+  const homework = useMemo(() => tasks.filter((t) => t.kind === "HOMEWORK" && t.status !== "CANCELLED"), [tasks]);
 
   const days = useMemo(() => {
     if (view === "week") {
@@ -90,7 +119,7 @@ export function CalendarApp({
     };
     for (const s of exams) {
       if (subjectFilter && s.id !== subjectFilter) continue;
-      add(s.examDate, { kind: "exam", id: s.id, title: s.name, color: s.color, href: `/subjects/${s.id}` });
+      add(s.examDate, { kind: "exam", id: s.id, title: s.name, color: s.color, href: `/subjects/${s.id}`, sort: -1 });
     }
     for (const t of tasks) {
       if (subjectFilter && t.subjectId !== subjectFilter) continue;
@@ -99,16 +128,50 @@ export function CalendarApp({
       add(due, {
         kind: "task",
         id: t.id,
-        title: t.title,
+        title: t.kind === "HOMEWORK" ? `ДЗ: ${t.title}` : t.title,
         color: t.subject?.color ?? "#94a3b8",
         href: `/tasks/${t.id}`,
         done: t.status === "DONE",
         overdue: isOverdue(due, t.status),
+        sort: 2000,
       });
     }
-    if (!subjectFilter) for (const e of events) add(e.startAt, { kind: "event", id: e.id, title: e.title, color: e.color ?? e.subject?.color ?? "#6366f1" });
+    const from = days[0];
+    const to = addDays(days[days.length - 1], 1);
+    for (const e of expandEvents(events, from, to)) {
+      if (subjectFilter && e.subjectId !== subjectFilter) continue;
+      const meta = kindMeta(e.kind);
+      const hw = homework.filter((t) => t.status !== "DONE" && isDueAt(t, e)).length;
+      add(e.start.toISOString(), {
+        kind: "event",
+        id: e.key,
+        title: e.title,
+        color: e.color ?? e.subject?.color ?? meta.color,
+        time: e.allDay ? undefined : `${hhmm(e.start)}${e.end ? `–${hhmm(e.end)}` : ""}`,
+        sort: e.allDay ? 0 : e.start.getHours() * 60 + e.start.getMinutes(),
+        event: e,
+        start: e.start.toISOString(),
+        homework: hw,
+        meta: [hw ? "сдать ДЗ" : null, meta.label, e.location, e.description?.split("\n").slice(1).join(", ")].filter(Boolean).join(" · "),
+      });
+    }
+    for (const list of map.values()) list.sort((a, b) => a.sort - b.sort);
     return map;
-  }, [tasks, exams, events, subjectFilter, moved]);
+  }, [tasks, exams, events, subjectFilter, moved, days, homework]);
+
+  const openHomework = useMemo(() => {
+    const e = eventOpen?.event;
+    const start = eventOpen?.start;
+    if (!e || !start || !e.subjectId || ["EXAM", "CONSULT"].includes(e.kind)) return null;
+    const lesson = { subjectId: e.subjectId, start: new Date(start) };
+    return {
+      subjectId: e.subjectId,
+      start,
+      kind: e.kind,
+      due: homework.filter((t) => isDueAt(t, lesson)),
+      assigned: homework.filter((t) => isAssignedAt({ subjectId: t.subjectId, lessonAt: t.lessonAt ?? null }, lesson)),
+    };
+  }, [eventOpen, homework]);
 
   const itemsOf = (day: Date) => byDay.get(format(day, "yyyy-MM-dd")) ?? [];
   const selectedItems = itemsOf(selected);
@@ -135,14 +198,14 @@ export function CalendarApp({
     <div>
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-2xl font-semibold tracking-tight">Календарь</h1>
+        <Button variant="ghost" onClick={() => setImportOpen(true)} title="Загрузить расписание из файла .ics или по ссылке">
+          <FileUp className="h-4 w-4" /> {sync.url ? "Расписание" : "Импорт .ics"}
+        </Button>
         <Button
           variant="secondary"
-          onClick={() => {
-            setEventDate(format(selected, "yyyy-MM-dd"));
-            setEventOpen(true);
-          }}
+          onClick={() => setEventOpen({ date: format(selected, "yyyy-MM-dd") })}
         >
-          <CalendarPlus className="h-4 w-4" /> Событие
+          <CalendarPlus className="h-4 w-4" /> Пара / событие
         </Button>
         <Button onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}>
           <Plus className="h-4 w-4" /> Задача
@@ -163,6 +226,14 @@ export function CalendarApp({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        {view === "week" ? (
+          <span className="text-xs text-muted">
+            {(() => {
+              const p = weekParity(days[0]);
+              return `${p.week}-я неделя · ${p.odd ? "нечётная" : "чётная"}`;
+            })()}
+          </span>
+        ) : null}
         <Button
           variant="secondary"
           size="sm"
@@ -254,11 +325,16 @@ export function CalendarApp({
                         draggable={it.kind === "task"}
                         onDragStart={(e) => e.dataTransfer.setData("text/task", it.id)}
                         onClick={(e) => {
+                          if (it.event) {
+                            e.stopPropagation();
+                            setEventOpen({ event: it.event, start: it.start });
+                            return;
+                          }
                           if (!it.href) return;
                           e.stopPropagation();
                           router.push(it.href);
                         }}
-                        title={it.title}
+                        title={[it.time, it.title, it.meta].filter(Boolean).join(" · ")}
                         className={cn(
                           "flex items-center gap-1 truncate rounded px-1 py-px text-[11px] leading-4",
                           it.kind === "exam" ? "font-semibold text-white" : "bg-subtle text-fg/90 hover:bg-line",
@@ -268,7 +344,9 @@ export function CalendarApp({
                         style={it.kind === "exam" ? { background: it.color } : undefined}
                       >
                         {it.kind !== "exam" ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} /> : null}
+                        {it.time ? <span className="shrink-0 tabular-nums text-muted">{it.time.slice(0, 5)}</span> : null}
                         <span className="truncate">{it.title}</span>
+                        {it.homework ? <span className="ml-auto shrink-0 rounded bg-warning/15 px-1 text-[10px] font-semibold text-warning">ДЗ</span> : null}
                       </div>
                     ))}
                     {items.length > limit ? <div className="px-1 text-[11px] text-muted">ещё {items.length - limit}</div> : null}
@@ -298,11 +376,37 @@ export function CalendarApp({
                     ) : (
                       <span className="mx-1 h-2 w-2 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} />
                     )}
-                    <span className={cn("min-w-0 flex-1 truncate text-sm", it.done && "text-muted line-through", it.kind === "exam" && "font-medium")}>
-                      {it.kind === "exam" ? `Экзамен: ${it.title}` : it.title}
+                    <span className="min-w-0 flex-1">
+                      <span className={cn("block truncate text-sm", it.done && "text-muted line-through", it.kind === "exam" && "font-medium")}>
+                        {it.kind === "exam" ? `Экзамен: ${it.title}` : it.title}
+                      </span>
+                      {it.time || it.meta ? (
+                        <span className="flex items-center gap-1 truncate text-xs text-muted">
+                          {it.time ? <span className="tabular-nums">{it.time}</span> : null}
+                          {it.meta ? (
+                            <>
+                              {it.time ? "·" : null}
+                              {it.event?.location ? <MapPin className="h-3 w-3" /> : null}
+                              {it.meta}
+                            </>
+                          ) : null}
+                        </span>
+                      ) : null}
                     </span>
                   </>
                 );
+                if (it.event) {
+                  const ev = it.event;
+                  return (
+                    <button
+                      key={`${it.kind}-${it.id}`}
+                      onClick={() => setEventOpen({ event: ev, start: it.start })}
+                      className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-subtle"
+                    >
+                      {inner}
+                    </button>
+                  );
+                }
                 return it.href ? (
                   <Link key={`${it.kind}-${it.id}`} href={it.href} className="flex items-center gap-2 rounded-xl px-2.5 py-2 transition-colors hover:bg-subtle">
                     {inner}
@@ -315,37 +419,41 @@ export function CalendarApp({
               })
             )}
           </div>
-          <p className="border-t border-line px-4 py-2.5 text-xs text-muted max-sm:hidden">Двойной клик по дню — новая задача. Задачи можно перетаскивать.</p>
+          <p className="border-t border-line px-4 py-2.5 text-xs text-muted max-sm:hidden">Двойной клик по дню — новая задача. Задачи можно перетаскивать. Расписание пар — кнопка «Пара / событие» с повтором.</p>
         </aside>
       </div>
 
       <Modal open={!!createOn} onClose={() => setCreateOn(null)} title="Новая задача" description={createOn ? format(new Date(createOn), "d MMMM, EEEE", { locale: ru }) : undefined}>
         {createOn ? <TaskForm subjects={subjects} initial={{ dueDate: createOn }} onDone={() => setCreateOn(null)} /> : null}
       </Modal>
-      <Modal open={eventOpen} onClose={() => setEventOpen(false)} title="Новое событие">
-        <form
-          className="space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const res = await createEvent({ title: eventTitle, startAt: eventDate, allDay: true });
-            if (!res.ok) toast.push(res.error, "err");
-            else {
-              toast.push("Событие создано");
-              setEventOpen(false);
-              setEventTitle("");
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Импорт расписания" description="Пары, экзамены и предметы из файла .ics" className="sm:max-w-lg">
+        {importOpen ? <ScheduleImport subjects={subjects} sync={sync} onDone={() => setImportOpen(false)} /> : null}
+      </Modal>
+      <Modal open={!!eventOpen} onClose={() => setEventOpen(null)} title={eventOpen?.event ? eventOpen.event.title : "Новое событие"}
+        description={eventOpen?.event && eventOpen.start ? format(new Date(eventOpen.start), "EEEE, d MMMM, HH:mm", { locale: ru }) : undefined}
+        className="sm:max-w-md"
+      >
+        {eventOpen ? (
+          <EventForm
+            key={eventOpen.event?.id ?? "new"}
+            event={eventOpen.event}
+            defaultDate={eventOpen.date}
+            subjects={subjects}
+            onDone={() => setEventOpen(null)}
+            homework={
+              openHomework ? (
+                <HomeworkPanel
+                  key={openHomework.start}
+                  subjectId={openHomework.subjectId}
+                  lessonStart={openHomework.start}
+                  lessonKind={openHomework.kind}
+                  due={openHomework.due}
+                  assigned={openHomework.assigned}
+                />
+              ) : null
             }
-          }}
-        >
-          <Field label="Название">
-            <Input value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} required autoFocus placeholder="Консультация, пересдача…" />
-          </Field>
-          <Field label="Дата">
-            <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
-          </Field>
-          <Button type="submit" className="w-full">
-            Добавить
-          </Button>
-        </form>
+          />
+        ) : null}
       </Modal>
     </div>
   );

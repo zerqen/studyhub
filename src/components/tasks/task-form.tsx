@@ -9,6 +9,8 @@ import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea } from "../ui/field";
 import { useToast } from "../ui/toast";
 
+const LAB_STAGES = ["Выполнить", "Оформить отчёт", "Защитить"];
+
 export function TaskForm({
   id,
   subjects,
@@ -34,6 +36,7 @@ export function TaskForm({
     tags: initial?.tags ?? "",
     questionId: initial?.questionId ?? "",
   });
+  const [lab, setLab] = useState(false);
   const [more, setMore] = useState(Boolean(id && (initial?.startDate || initial?.tags || initial?.questionId)));
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -52,6 +55,7 @@ export function TaskForm({
       dueTime: v.dueTime || null,
       tags: v.tags.split(",").map((t) => t.trim()).filter(Boolean),
       questionId: v.questionId || null,
+      ...(!id && lab ? { stages: LAB_STAGES } : {}),
     };
     const res = id ? await updateTask(id, payload) : await createTask(payload);
     setBusy(false);
@@ -98,6 +102,24 @@ export function TaskForm({
           <Input type="time" value={v.dueTime} onChange={(e) => set({ dueTime: e.target.value })} />
         </Field>
       </div>
+
+      {!id ? (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line px-3 py-2.5 text-sm transition-colors hover:bg-subtle/50">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={lab}
+            onChange={(e) => {
+              setLab(e.target.checked);
+              if (e.target.checked && !v.title) set({ title: "Лабораторная работа №" });
+            }}
+          />
+          <span>
+            <span className="font-medium">Лабораторная</span>
+            <span className="block text-xs text-muted">Добавит этапы: {LAB_STAGES.join(" → ")}</span>
+          </span>
+        </label>
+      ) : null}
 
       <button type="button" className="flex items-center gap-1 text-[13px] font-medium text-muted hover:text-fg" onClick={() => setMore((m) => !m)}>
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !more && "-rotate-90")} /> Дополнительно

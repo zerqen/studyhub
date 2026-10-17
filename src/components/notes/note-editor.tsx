@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Bold, Check, Code, Eye, Heading2, Italic, List, ListTodo, Loader2, Pencil, Pin, Quote, Trash2 } from "lucide-react";
+import { Bold, Check, Code, Eye, Heading2, Italic, List, ListTodo, Loader2, Pencil, Pin, Quote, Sigma, SquareSigma, Trash2 } from "lucide-react";
 import { autosaveNote, createNote, deleteNote, updateNote } from "@/actions/notes";
 import { NOTE_COLORS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -13,6 +11,7 @@ import { Input, Select } from "../ui/field";
 import { useToast } from "../ui/toast";
 import { ConfirmDialog } from "../ui/modal";
 import { FileUploader } from "../files/uploader";
+import { Markdown } from "../ui/markdown";
 
 type NoteInput = {
   id: string;
@@ -34,6 +33,8 @@ const tools = [
   { icon: ListTodo, label: "Чек-лист", before: "- [ ] ", after: "" },
   { icon: Code, label: "Код", before: "`", after: "`" },
   { icon: Quote, label: "Цитата", before: "> ", after: "" },
+  { icon: Sigma, label: "Формула", before: "$", after: "$" },
+  { icon: SquareSigma, label: "Формула блоком", before: "\n$$\n", after: "\n$$\n" },
 ];
 
 export function NoteEditor({
@@ -167,8 +168,8 @@ export function NoteEditor({
       </div>
 
       {preview ? (
-        <div className="prose-note min-h-72 cursor-text px-5 py-4 sm:px-6" onDoubleClick={() => setPreview(false)}>
-          {content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown> : <p className="text-muted">Пусто. Двойной клик — начать писать.</p>}
+        <div className="min-h-72 cursor-text px-5 py-4 sm:px-6" onDoubleClick={() => setPreview(false)}>
+          {content ? <Markdown className="text-[15px]">{content}</Markdown> : <p className="text-muted">Пусто. Двойной клик — начать писать.</p>}
         </div>
       ) : (
         <textarea
@@ -176,7 +177,7 @@ export function NoteEditor({
           rows={14}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Пиши в Markdown: ## заголовок, **жирный**, - список, - [ ] задача"
+          placeholder="Markdown: ## заголовок, **жирный**, - список, - [ ] задача. Формулы: $a^2+b^2$ или $$\int_0^1 f(x)\,dx$$"
           className="block min-h-72 w-full resize-y bg-transparent px-5 py-4 font-mono text-[13.5px] leading-relaxed outline-none placeholder:text-muted/60 sm:px-6"
         />
       )}
@@ -214,7 +215,7 @@ export function NoteEditor({
             <Pin className="h-3.5 w-3.5" /> {pinned ? "Закреплена" : "Закрепить"}
           </button>
           <div className="ml-auto flex flex-wrap gap-2">
-            {note ? <FileUploader parent={{ noteId: note.id }} compact /> : null}
+            {note ? <FileUploader parent={{ noteId: note.id }} compact camera /> : null}
             {note ? (
               <Button type="button" variant="ghost" size="icon-sm" className="hover:text-danger" onClick={() => setConfirm(true)} aria-label="Удалить">
                 <Trash2 className="h-4 w-4" />

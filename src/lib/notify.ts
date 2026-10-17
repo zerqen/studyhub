@@ -1,14 +1,22 @@
 import { prisma } from "./prisma";
 import { startOfDay, addDays } from "date-fns";
 
-// Не чаще раза в 10 минут на пользователя (в пределах одного серверного инстанса)
-const lastRun = new Map<string, number>();
+// Не чаще раза в 10 минут на пользователя. Отметка хранится в базе — общая для всех инстансов
 const MIN_INTERVAL = 10 * 60 * 1000;
+// Быстрая проверка в памяти, чтобы не ходить в базу на каждом переходе
+const lastCheck = new Map<string, number>();
 
 export async function refreshDeadlineNotifications(userId: string, force = false) {
-  const now = Date.now();
-  if (!force && now - (lastRun.get(userId) ?? 0) < MIN_INTERVAL) return;
-  lastRun.set(userId, now);
+  if (!force) {
+    if (Date.now() - (lastCheck.get(userId) ?? 0) < MIN_INTERVAL) return;
+    lastCheck.set(userId, Date.now());
+    // Атомарно «занимаем» пересчёт: обновится, только если прошло 10 минут
+    const claimed = await prisma.user.updateMany({
+      where: { id: userId, OR: [{ deadlineCheckedAt: null }, { deadlineCheckedAt: { lt: new Date(Date.now() - MIN_INTERVAL) } }] },
+      data: { deadlineCheckedAt: new Date() },
+    });
+    if (!claimed.count) return;
+  }
 
   const today = startOfDay(new Date());
   const soon = addDays(today, 3);

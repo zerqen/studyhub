@@ -63,6 +63,21 @@ export const NOTE_COLORS = ["#eab308", "#22c55e", "#3b82f6", "#ec4899", "#a855f7
 export const EMOJIS = ["📘", "📗", "📙", "📕", "🧠", "📐", "🧪", "💻", "📜", "🎯", "📝", "🔬", "🌍", "🎵", "⚖️"];
 
 export const MAX_FILE_SIZE = 15 * 1024 * 1024;
+/** Аудио и видео (записи лекций) через сервер — до 90 МБ */
+export const MAX_MEDIA_FILE_SIZE = 90 * 1024 * 1024;
+
+export function isMedia(mime: string) {
+  return mime.startsWith("audio/") || mime.startsWith("video/");
+}
+
+/** Лимит для загрузки через сервер: записи — 90 МБ, остальное — 15 МБ */
+export function maxServerSize(mime: string) {
+  return isMedia(mime) ? MAX_MEDIA_FILE_SIZE : MAX_FILE_SIZE;
+}
+/** Большие файлы (записи лекций) грузятся из браузера прямо в Vercel Blob, минуя сервер */
+export const MAX_DIRECT_FILE_SIZE = 300 * 1024 * 1024;
+/** Всё, что больше, идёт напрямую: у функций Vercel лимит тела запроса ~4,5 МБ */
+export const DIRECT_UPLOAD_THRESHOLD = 4 * 1024 * 1024;
 
 export const ALLOWED_MIME = new Set([
   "image/jpeg",
@@ -77,7 +92,16 @@ export const ALLOWED_MIME = new Set([
   "text/plain",
   "audio/mpeg",
   "audio/wav",
+  "audio/x-wav",
   "audio/webm",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/m4a",
+  "audio/aac",
+  "audio/ogg",
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
   "application/zip",
 ]);
 

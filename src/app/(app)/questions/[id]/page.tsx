@@ -10,6 +10,7 @@ export default async function QuestionPage({ params }: { params: Promise<{ id: s
     where: { id, userId: user.id },
     include: {
       subject: { select: { id: true, name: true, color: true, emoji: true } },
+      lecture: { select: { id: true, title: true, number: true } },
       tags: { include: { tag: true } },
       attachments: { select: { id: true, originalName: true, mimeType: true, size: true } },
       notes: { orderBy: { updatedAt: "desc" }, take: 6, select: { id: true, title: true, content: true, color: true } },

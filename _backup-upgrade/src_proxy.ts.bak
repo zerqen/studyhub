@@ -1,0 +1,24 @@
+import nextAuthMiddleware from "next-auth/middleware";
+
+// Перенаправляем стандартный middleware от next-auth 
+// под новым системным именем 'proxy', которое требует Next.js
+export { nextAuthMiddleware as proxy };
+
+export const config = {
+  matcher: [
+    "/",
+    "/calendar/:path*",
+    "/subjects/:path*",
+    "/tasks/:path*",
+    "/questions/:path*",
+    "/tickets/:path*",
+    "/notes/:path*",
+    "/files/:path*",
+    "/profile/:path*",
+    "/settings/:path*",
+    "/search/:path*",
+    "/study/:path*",
+    "/review/:path*",
+    "/lectures/:path*",
+  ],
+};

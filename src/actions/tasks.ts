@@ -10,7 +10,7 @@ export async function createTask(input: unknown): Promise<ActionResult<{ id: str
   return withUser(async (userId) => {
     const parsed = taskSchema.safeParse(input);
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Некорректные данные");
-    const { tags, dueTime, subjectId, questionId, ...rest } = parsed.data;
+    const { tags, dueTime, subjectId, questionId, stages, ...rest } = parsed.data;
     if (subjectId) {
       const owned = await prisma.subject.findFirst({ where: { id: subjectId, userId } });
       if (!owned) throw new Error("Предмет не найден");
@@ -27,6 +27,9 @@ export async function createTask(input: unknown): Promise<ActionResult<{ id: str
         ...(questionId ? { questions: { connect: { id: questionId } } } : {}),
         userId,
         tags: { create: tagRows.map((t) => ({ tagId: t.id })) },
+        ...(stages?.length
+          ? { subtasks: { create: stages.map((title: string, i: number) => ({ userId, title, sortOrder: i + 1 })) } }
+          : {}),
       },
     });
     refreshAll();
@@ -40,7 +43,8 @@ export async function updateTask(id: string, input: unknown): Promise<ActionResu
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Некорректные данные");
     const existing = await prisma.task.findFirst({ where: { id, userId } });
     if (!existing) throw new Error("Задача не найдена");
-    const { tags, dueTime, subjectId, questionId, ...rest } = parsed.data;
+    const { tags, dueTime, subjectId, questionId, stages: _stages, ...rest } = parsed.data;
+    void _stages;
     if (subjectId) {
       const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId }, select: { id: true } });
       if (!subject) throw new Error("Предмет не найден");
@@ -80,6 +84,9 @@ export async function toggleTaskDone(id: string): Promise<ActionResult> {
     if (!task) throw new Error("Задача не найдена");
     const status = task.status === "DONE" ? "PLANNED" : "DONE";
     await prisma.task.update({ where: { id }, data: { status } });
+    if (status === "DONE") {
+      await prisma.progressLog.create({ data: { userId, subjectId: task.subjectId, type: "TASK_DONE", value: id } });
+    }
     refreshAll();
   });
 }

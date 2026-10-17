@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Check, ChevronLeft, Flag, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { BookMarked, Calendar, Check, ChevronLeft, Flag, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { deleteTask, toggleTaskDone } from "@/actions/tasks";
 import { QUESTION_STATUSES, TASK_PRIORITIES, TASK_STATUSES, labelOf, priorityTone, questionStatusTone, taskStatusTone } from "@/lib/constants";
 import { cn, formatDate, isOverdue } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { SubtaskTree } from "./subtask-tree";
 import { FileUploader } from "../files/uploader";
 import { FileGrid } from "../files/file-grid";
 import { CommentThread } from "../comments/comment-thread";
+import { Markdown } from "../ui/markdown";
 
 type FileItem = { id: string; originalName: string; mimeType: string; size: number };
 
@@ -31,6 +32,8 @@ type TaskDetailData = {
   dueTime: string | null;
   priority: string;
   status: string;
+  kind?: string;
+  lessonAt?: string | null;
   subtasks: { id: string; parentId: string | null; title: string; status: string; note: string | null; dueDate: string | null }[];
   attachments: FileItem[];
   notes: { id: string; title: string; content: string; color: string }[];
@@ -94,7 +97,11 @@ export function TaskDetail({
               ))}
             </div>
             <h1 className={cn("text-xl font-semibold leading-snug tracking-tight sm:text-2xl", done && "text-muted line-through")}>{task.title}</h1>
-            {task.description ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted">{task.description}</p> : null}
+            {task.description ? (
+              <div className="mt-3 text-sm text-muted">
+                <Markdown>{task.description}</Markdown>
+              </div>
+            ) : null}
             <div className="mt-5 flex flex-wrap gap-2">
               <Button variant={done ? "secondary" : "primary"} onClick={() => void complete()}>
                 {done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" />}
@@ -142,6 +149,14 @@ export function TaskDetail({
                   <Badge tone={priorityTone(task.priority)}>{labelOf(TASK_PRIORITIES, task.priority)}</Badge>
                 </dd>
               </div>
+              {task.kind === "HOMEWORK" ? (
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="flex items-center gap-2 text-muted">
+                    <BookMarked className="h-4 w-4" /> Домашка
+                  </dt>
+                  <dd className="text-right text-sm">{task.lessonAt ? `задали ${formatDate(task.lessonAt, "d MMM, HH:mm")}` : "да"}</dd>
+                </div>
+              ) : null}
             </dl>
           </Section>
 
@@ -180,7 +195,7 @@ export function TaskDetail({
           </Section>
 
           <Section title="Файлы">
-            <FileUploader parent={{ taskId: task.id }} compact />
+            <FileUploader parent={{ taskId: task.id }} compact camera />
             {task.attachments.length ? (
               <div className="mt-3">
                 <FileGrid files={task.attachments} compact />

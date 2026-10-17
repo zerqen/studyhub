@@ -38,3 +38,8 @@ export function initials(name?: string | null) {
     .map((p) => p[0]?.toUpperCase())
     .join("");
 }
+
+/** Ключ дня YYYY-MM-DD в часовом поясе пользователя (по умолчанию — Москва) */
+export function dayKey(date: Date | string, timeZone = "Europe/Moscow") {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(date));
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Нет сети · StudyHub</title>
+<style>
+  :root { --bg:#f8f8fa; --fg:#11111b; --muted:#6b6d7c; --accent:#4f46e5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d0d12; --fg:#ececf1; --muted:#9697a6; --accent:#8178ff; } }
+  body { margin:0; min-height:100dvh; display:grid; place-items:center; background:var(--bg); color:var(--fg);
+         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; padding:16px; text-align:center; }
+  .logo { width:48px; height:48px; border-radius:12px; background:var(--accent); color:#fff; display:grid; place-items:center;
+          font-weight:700; font-size:22px; margin:0 auto 16px; }
+  p { color:var(--muted); max-width:22rem; margin:8px auto 20px; line-height:1.5; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:12px; padding:10px 18px; font:inherit; font-weight:600; cursor:pointer; }
+</style>
+</head>
+<body>
+  <main>
+    <div class="logo">S</div>
+    <h1 style="font-size:20px;margin:0">Нет подключения</h1>
+    <p>StudyHub хранит данные на сервере, поэтому без интернета страницы не открываются. Как только связь появится — всё заработает.</p>
+    <button onclick="location.reload()">Попробовать снова</button>
+  </main>
+</body>
+</html>

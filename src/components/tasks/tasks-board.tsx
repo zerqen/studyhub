@@ -8,7 +8,7 @@ import { TASK_PRIORITIES, labelOf, priorityTone } from "@/lib/constants";
 import { cn, daysUntil, formatDate } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { ConfirmDialog, Modal } from "../ui/modal";
+import { Modal } from "../ui/modal";
 import { PageHeader, Segmented } from "../ui/page";
 import { EmptyState } from "../ui/empty";
 import { Select } from "../ui/field";
@@ -27,6 +27,7 @@ type Task = {
   dueTime: string | null;
   priority: string;
   status: string;
+  kind?: string;
   subtasks: { status: string }[];
   tags: { tag: { name: string } }[];
   questions: { id: string }[];
@@ -52,7 +53,7 @@ export function TasksBoard({
   const [scope, setScope] = useState<"active" | "done" | "all">("active");
   const [editing, setEditing] = useState<Task | null>(null);
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true });
   // Оптимистичные отметки: галочка ставится сразу, сервер догоняет
   const [optimistic, setOptimistic] = useState<Record<string, string>>({});
@@ -62,6 +63,7 @@ export function TasksBoard({
   const groups = useMemo<Group[]>(() => {
     const q = query.trim().toLowerCase();
     const list = tasks.filter((t) => {
+      if (hidden.has(t.id)) return false;
       const st = optimistic[t.id] ?? t.status;
       if (st === "CANCELLED" && scope !== "all") return false;
       if (scope === "active" && st === "DONE") return false;
@@ -90,7 +92,21 @@ export function TasksBoard({
       { id: "nodate", title: "Без срока", items: g.nodate },
       { id: "done", title: "Выполнено", items: g.done },
     ].filter((x) => x.items.length);
-  }, [tasks, query, subject, scope, tag, optimistic]);
+  }, [tasks, query, subject, scope, tag, optimistic, hidden]);
+
+  function remove(task: Task) {
+    toast.undoable({
+      text: `«${task.title.slice(0, 40)}» удалена`,
+      hide: () => setHidden((h) => new Set(h).add(task.id)),
+      restore: () =>
+        setHidden((h) => {
+          const n = new Set(h);
+          n.delete(task.id);
+          return n;
+        }),
+      commit: () => deleteTask(task.id),
+    });
+  }
 
   const activeCount = tasks.filter((t) => !["DONE", "CANCELLED"].includes(statusOf(t))).length;
 
@@ -185,7 +201,10 @@ export function TasksBoard({
                         <li key={task.id} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-subtle/50">
                           <Checkbox checked={done} onChange={() => void toggle(task)} className="mt-0.5" label={done ? "Вернуть в работу" : "Выполнить"} />
                           <Link href={`/tasks/${task.id}`} className="min-w-0 flex-1">
-                            <div className={cn("text-sm leading-snug transition-colors", done && "text-muted line-through")}>{task.title}</div>
+                            <div className={cn("text-sm leading-snug transition-colors", done && "text-muted line-through")}>
+                              {task.kind === "HOMEWORK" ? <span className="mr-1.5 rounded bg-accent/10 px-1 py-px text-[10px] font-semibold text-accent">ДЗ</span> : null}
+                              {task.title}
+                            </div>
                             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                               {task.subject ? (
                                 <span className="inline-flex items-center gap-1.5">
@@ -223,7 +242,7 @@ export function TasksBoard({
                             <Button variant="ghost" size="icon-sm" aria-label="Редактировать" onClick={() => setEditing(task)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon-sm" aria-label="Удалить" className="hover:text-danger" onClick={() => setDeleting(task.id)}>
+                            <Button variant="ghost" size="icon-sm" aria-label="Удалить" className="hover:text-danger" onClick={() => remove(task)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -263,19 +282,6 @@ export function TasksBoard({
           />
         ) : null}
       </Modal>
-      <ConfirmDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        title="Удалить задачу?"
-        text="Задача и её подзадачи будут удалены."
-        onConfirm={async () => {
-          if (!deleting) return;
-          const result = await deleteTask(deleting);
-          if (!result.ok) toast.push(result.error, "err");
-          else toast.push("Задача удалена");
-          setDeleting(null);
-        }}
-      />
     </div>
   );
 }

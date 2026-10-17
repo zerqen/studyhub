@@ -11,7 +11,13 @@ const example = `[
     "answer": "Предел отношения приращения функции к приращению аргумента.",
     "explanation": "Показывает скорость изменения функции.",
     "difficulty": "EASY",
-    "tags": ["определения"]
+    "tags": ["определения"],
+    "ticket": 1
+  },
+  {
+    "text": "Найдите производную $f(x) = x^2 \\sin x$",
+    "answer": "$f'(x) = 2x \\sin x + x^2 \\cos x$",
+    "kind": "PROBLEM"
   }
 ]`;
 
@@ -51,7 +57,8 @@ export function QuestionImport({ subjectId, onDone }: { subjectId: string; onDon
       <p className="text-sm text-muted">
         Поля: <code className="rounded bg-subtle px-1">text</code> (обязательно), <code className="rounded bg-subtle px-1">answer</code>,{" "}
         <code className="rounded bg-subtle px-1">explanation</code>, <code className="rounded bg-subtle px-1">difficulty</code> (EASY / MEDIUM / HARD),{" "}
-        <code className="rounded bg-subtle px-1">tags</code>.
+        <code className="rounded bg-subtle px-1">tags</code>, <code className="rounded bg-subtle px-1">kind</code> (THEORY — теория, PROBLEM — задача),{" "}
+        <code className="rounded bg-subtle px-1">ticket</code> (номер билета, если есть официальный список).
       </p>
       <textarea
         aria-label="JSON вопросов"

@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, CalendarDays, CheckSquare, FolderOpen, Home, Menu, NotebookPen, Settings, X } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, CheckSquare, FolderOpen, Home, Menu, NotebookPen, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn, initials } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 import { SearchBox } from "./search-box";
 import { NotificationBell } from "./notification-bell";
+import { Hotkeys } from "./hotkeys";
+import { Assistant } from "../assistant/assistant";
 
 const nav = [
   { href: "/", label: "Главная", icon: Home },
+  { href: "/review", label: "Повторение", icon: Brain },
   { href: "/subjects", label: "Предметы", icon: BookOpen },
   { href: "/tasks", label: "Задачи", icon: CheckSquare },
   { href: "/calendar", label: "Календарь", icon: CalendarDays },
@@ -20,16 +23,18 @@ const nav = [
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  if (href === "/subjects") return pathname.startsWith("/subjects") || pathname.startsWith("/questions");
+  if (href === "/subjects") return pathname.startsWith("/subjects") || pathname.startsWith("/questions") || pathname.startsWith("/lectures") || pathname.startsWith("/exams");
   return pathname.startsWith(href);
 }
 
 export function AppShell({
   user,
   notifications,
+  subjects,
   children,
 }: {
   user: { name: string; email: string; avatarPath: string | null };
+  subjects: { id: string; name: string }[];
   notifications: { id: string; title: string; body: string; href: string | null; read: boolean; createdAt: Date }[];
   children: React.ReactNode;
 }) {
@@ -86,8 +91,8 @@ export function AppShell({
   );
 
   return (
-    <div className="min-h-dvh lg:pl-60">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-surface lg:block">{sidebar}</aside>
+    <div className="min-h-dvh lg:pl-60 print:pl-0">
+      <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-surface lg:block">{sidebar}</aside>
 
       {open ? (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -101,7 +106,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-bg px-4 sm:px-6">
+      <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-bg px-4 sm:px-6">
         <button className="-ml-1.5 rounded-lg p-1.5 text-muted hover:bg-subtle lg:hidden" onClick={() => setOpen(true)} aria-label="Меню">
           <Menu className="h-5 w-5" />
         </button>
@@ -115,9 +120,11 @@ export function AppShell({
         </div>
       </header>
 
+      <Hotkeys subjects={subjects} />
+      <Assistant storageKey={user.email} />
       <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:pb-12 lg:pt-8">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
         {nav.slice(0, 5).map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = item.icon;

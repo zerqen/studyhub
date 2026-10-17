@@ -21,6 +21,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         startDate: true,
         dueDate: true,
         dueTime: true,
+        kind: true,
         priority: true,
         status: true,
         subject: { select: { id: true, name: true, color: true } },

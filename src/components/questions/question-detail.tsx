@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, ChevronLeft, Eye, EyeOff, ListPlus, Pencil, Plus, X } from "lucide-react";
+import { ChevronLeft, Eye, EyeOff, ListPlus, Pencil, Plus } from "lucide-react";
 import { recordAttempt } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, formatRelative } from "@/lib/utils";
+import { GRADES, isDue, previewLabel, type Grade } from "@/lib/srs";
+import { Markdown } from "../ui/markdown";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Modal } from "../ui/modal";
@@ -27,6 +29,14 @@ type QuestionDetailData = {
   explanation: string | null;
   difficulty: string;
   status: string;
+  kind?: string;
+  ticketNo?: number | null;
+  srsDue: string | null;
+  srsInterval: number;
+  srsEase: number;
+  srsReps: number;
+  srsLapses: number;
+  lecture?: { id: string; title: string; number: number | null } | null;
   subject: { id: string; name: string; color: string; emoji: string };
   attachments?: FileItem[];
   notes?: { id: string; title: string; content: string; color: string }[];
@@ -40,17 +50,19 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
   const [showAnswer, setShowAnswer] = useState(false);
   const [editing, setEditing] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
-  const [pending, setPending] = useState<boolean | null>(null);
+  const [pending, setPending] = useState<Grade | null>(null);
   const toast = useToast();
   const attempts = question.attempts ?? [];
   const knewCount = attempts.filter((a) => a.knew).length;
 
-  async function attempt(knew: boolean) {
-    setPending(knew);
-    const result = await recordAttempt(question.id, knew);
+  const srs = { interval: question.srsInterval, ease: question.srsEase, reps: question.srsReps, lapses: question.srsLapses };
+
+  async function attempt(grade: Grade) {
+    setPending(grade);
+    const result = await recordAttempt(question.id, grade);
     setPending(null);
     if (!result.ok) toast.push(result.error, "err");
-    else toast.push(knew ? "Отмечено как выученное" : "Отправлено на повторение");
+    else toast.push(grade === 0 ? "Вопрос вернётся через 10 минут" : `Следующий повтор через ${previewLabel(srs, grade)}`);
   }
 
   return (
@@ -68,6 +80,8 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
                   {labelOf(QUESTION_STATUSES, question.status)}
                 </Badge>
                 <Badge>{labelOf(DIFFICULTIES, question.difficulty)}</Badge>
+                {question.kind === "PROBLEM" ? <Badge tone="accent">Задача</Badge> : null}
+                {question.ticketNo ? <Badge>Билет {question.ticketNo}</Badge> : null}
                 {question.tags.map((t) => (
                   <Badge key={t.tag.name}>#{t.tag.name}</Badge>
                 ))}
@@ -75,7 +89,14 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
                   <Pencil className="h-3.5 w-3.5" /> Изменить
                 </Button>
               </div>
-              <h1 className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">{question.text}</h1>
+              <div className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
+                <Markdown>{question.text}</Markdown>
+              </div>
+              {question.lecture ? (
+                <Link href={`/lectures/${question.lecture.id}`} className="mt-2 inline-block text-sm text-muted hover:text-accent">
+                  Лекция {question.lecture.number ?? ""} · {question.lecture.title}
+                </Link>
+              ) : null}
             </div>
 
             <div className="border-t border-line bg-subtle/40 px-5 py-5 sm:px-7">
@@ -83,12 +104,14 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
                 <div className="animate-fade-in space-y-4">
                   <div>
                     <div className="label-xs mb-1.5 text-accent">Ответ</div>
-                    <p className="whitespace-pre-wrap leading-relaxed">{question.answer || <span className="text-muted">Ответ пока не добавлен.</span>}</p>
+                    {question.answer ? <Markdown>{question.answer}</Markdown> : <span className="text-muted">Ответ пока не добавлен.</span>}
                   </div>
                   {question.explanation ? (
                     <div>
                       <div className="label-xs mb-1.5">Пояснение</div>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{question.explanation}</p>
+                      <div className="text-sm text-muted">
+                        <Markdown>{question.explanation}</Markdown>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -102,14 +125,27 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
                 {showAnswer ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 {showAnswer ? "Скрыть ответ" : "Показать ответ"}
               </Button>
-              <div className="ml-auto flex gap-2">
-                <Button variant="secondary" className="text-danger" loading={pending === false} onClick={() => void attempt(false)}>
-                  <X className="h-4 w-4" /> Не знал
-                </Button>
-                <Button variant="secondary" className="text-success" loading={pending === true} onClick={() => void attempt(true)}>
-                  <Check className="h-4 w-4" /> Знал
-                </Button>
-              </div>
+              {showAnswer ? (
+                <div className="ml-auto flex flex-wrap gap-1.5">
+                  {GRADES.map((g) => (
+                    <Button
+                      key={g.grade}
+                      variant="secondary"
+                      size="sm"
+                      loading={pending === g.grade}
+                      className={cn(g.grade === 0 && "text-danger", g.grade === 1 && "text-warning", g.grade === 2 && "text-success", g.grade === 3 && "text-accent")}
+                      onClick={() => void attempt(g.grade)}
+                      title={`Вернётся через ${previewLabel(srs, g.grade)}`}
+                    >
+                      {g.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <span className="ml-auto text-xs text-muted">
+                  {question.srsReps === 0 ? "Ещё не повторялся" : isDue(question.srsDue) ? "Пора повторить" : `Следующий повтор ${formatRelative(question.srsDue)}`}
+                </span>
+              )}
             </div>
           </article>
 
@@ -178,7 +214,7 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
           </Section>
 
           <Section title="Файлы">
-            <FileUploader parent={{ questionId: question.id }} compact />
+            <FileUploader parent={{ questionId: question.id }} compact camera />
             {question.attachments?.length ? (
               <div className="mt-3">
                 <FileGrid files={question.attachments} compact />
@@ -199,6 +235,9 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
             difficulty: question.difficulty,
             status: question.status,
             tags: question.tags.map((item) => item.tag.name).join(", "),
+            lectureId: question.lecture?.id,
+            kind: question.kind ?? "THEORY",
+            ticketNo: question.ticketNo ? String(question.ticketNo) : "",
           }}
           onDone={() => setEditing(false)}
         />

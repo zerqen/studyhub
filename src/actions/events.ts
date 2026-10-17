@@ -21,6 +21,10 @@ export async function createEvent(input: unknown): Promise<ActionResult<{ id: st
         endAt: parsed.data.endAt,
         allDay: parsed.data.allDay ?? true,
         color: parsed.data.color,
+        kind: parsed.data.kind ?? "OTHER",
+        location: parsed.data.location || null,
+        recurrence: parsed.data.recurrence || null,
+        repeatUntil: parsed.data.repeatUntil ?? null,
       },
     });
     refreshAll();
@@ -47,6 +51,10 @@ export async function updateEvent(id: string, input: unknown): Promise<ActionRes
         allDay: parsed.data.allDay,
         color: parsed.data.color,
         subjectId: parsed.data.subjectId === undefined ? undefined : parsed.data.subjectId || null,
+        kind: parsed.data.kind,
+        location: parsed.data.location === undefined ? undefined : parsed.data.location || null,
+        recurrence: parsed.data.recurrence === undefined ? undefined : parsed.data.recurrence || null,
+        repeatUntil: parsed.data.repeatUntil === undefined ? undefined : parsed.data.repeatUntil,
       },
     });
     refreshAll();

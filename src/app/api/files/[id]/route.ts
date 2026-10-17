@@ -16,12 +16,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!file) return new NextResponse("Not found", { status: 404 });
   const download = new URL(req.url).searchParams.get("download") === "1";
   if (isRemoteStoragePath(file.storagePath)) {
+    if (!download) {
+      // Просмотр — прямо с CDN Vercel Blob: быстрее, и аудио/видео можно перематывать (Range-запросы)
+      return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=300" } });
+    }
+    // Скачивание — через сервер, чтобы файл сохранился с исходным именем
     const remote = await fetch(file.storagePath);
     if (!remote.ok || !remote.body) return new NextResponse("Missing file", { status: 404 });
     return new NextResponse(remote.body, {
       headers: {
         "Content-Type": file.mimeType,
-        "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(file.originalName)}"`,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
         "Cache-Control": "private, max-age=3600",
       },
     });

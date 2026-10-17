@@ -77,6 +77,7 @@ export function Segmented<T extends string>({
       {options.map(([id, label]) => (
         <button
           key={id}
+          type="button"
           role="tab"
           aria-selected={value === id}
           onClick={() => onChange(id)}

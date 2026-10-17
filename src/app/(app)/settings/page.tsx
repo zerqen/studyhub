@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { PageHeader, Section } from "@/components/ui/page";
 import { useToast } from "@/components/ui/toast";
+import { PushSettings } from "@/components/settings/push-settings";
 
 const themes = [
   { id: "light", label: "Светлая", icon: Sun },
@@ -57,6 +58,10 @@ export default function SettingsPage() {
             </button>
           ))}
         </div>
+      </Section>
+
+      <Section title="Уведомления на телефон">
+        <PushSettings />
       </Section>
 
       <Section title="Пароль">

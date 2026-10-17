@@ -71,6 +71,8 @@ export const taskSchema = z.object({
   status: z.enum(["PLANNED", "IN_PROGRESS", "DONE", "OVERDUE", "CANCELLED"]),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
   questionId: z.string().optional().nullable(),
+  // Готовые этапы-подзадачи (например, для лабораторной)
+  stages: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
 });
 
 export const subtaskSchema = z.object({
@@ -93,22 +95,28 @@ export const ticketSchema = z.object({
 export const questionSchema = z.object({
   subjectId: z.string().min(1),
   ticketId: z.string().optional().nullable(),
+  lectureId: z.string().optional().nullable(),
   text: z.string().trim().min(1, "Текст вопроса обязателен").max(4000),
   answer: z.string().max(8000).optional().nullable(),
   explanation: z.string().max(8000).optional().nullable(),
   status: z.enum(["UNLEARNED", "IN_PROGRESS", "LEARNED", "REVIEW"]),
   difficulty: z.enum(["EASY", "MEDIUM", "HARD"]),
+  kind: z.enum(["THEORY", "PROBLEM"]).optional(),
+  ticketNo: z.number().int().min(1).max(999).optional().nullable(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 });
 
 export const questionImportSchema = z.object({
   subjectId: z.string().min(1),
+  lectureId: z.string().optional().nullable(),
   questions: z.array(
     z.object({
       text: z.string().trim().min(1).max(4000),
       answer: z.string().max(8000).optional().nullable(),
       explanation: z.string().max(8000).optional().nullable(),
       difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).optional(),
+      kind: z.enum(["THEORY", "PROBLEM"]).optional(),
+      ticket: z.number().int().min(1).max(999).optional().nullable(),
       tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
     }),
   ).min(1).max(500),
@@ -134,6 +142,18 @@ export const eventSchema = z.object({
   endAt: optionalDate,
   allDay: z.boolean().optional(),
   color: z.string().optional().nullable(),
+  kind: z.enum(["LECTURE", "SEMINAR", "LAB", "TEST", "CONSULT", "EXAM", "OTHER"]).optional(),
+  location: z.string().trim().max(120).optional().nullable(),
+  recurrence: z.enum(["WEEKLY", "BIWEEKLY"]).optional().nullable(),
+  repeatUntil: optionalDate,
+});
+
+export const lectureSchema = z.object({
+  subjectId: z.string().min(1),
+  title: z.string().trim().min(1, "Нужна тема лекции").max(200),
+  number: z.number().int().min(0).max(999).optional().nullable(),
+  date: optionalDate,
+  summary: z.string().max(100_000).optional(),
 });
 
 export const commentSchema = z.object({
@@ -141,3 +161,30 @@ export const commentSchema = z.object({
   questionId: z.string().optional().nullable(),
   content: z.string().trim().min(1).max(2000),
 }).refine((value) => Boolean(value.taskId) !== Boolean(value.questionId), "Комментарий должен быть привязан к задаче или вопросу");
+
+export const examConfigSchema = z.object({
+  subjectId: z.string().min(1),
+  theory: z.number().int().min(0).max(5),
+  problems: z.number().int().min(0).max(5),
+  extra: z.number().int().min(0).max(8),
+  prepMinutes: z.number().int().min(0).max(180),
+  // null — случайный билет, число — конкретный билет из списка, 0 — случайный из реальных
+  ticketNo: z.number().int().min(0).max(999).optional().nullable(),
+  weak: z.boolean().optional(),
+});
+
+export const homeworkSchema = z.object({
+  subjectId: z.string().min(1),
+  lessonAt: z.string().min(1).transform((v) => new Date(v)),
+  lessonKind: z.string().max(20).optional().nullable(),
+  title: z.string().trim().min(1, "Напиши, что задали").max(200),
+  description: z.string().max(8000).optional().nullable(),
+  // next — к следующей паре предмета, same — к следующей паре того же типа, date — своя дата
+  due: z.enum(["next", "same", "date"]),
+  dueDate: z.string().optional().nullable(),
+});
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2000),
+  keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(4).max(100) }),
+});

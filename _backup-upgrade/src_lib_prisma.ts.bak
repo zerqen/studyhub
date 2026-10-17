@@ -1,0 +1,26 @@
+import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import pg from "pg";
+
+// 1. Создаем пул соединений с отключением строгой валидации SSL облачного провайдера
+const pool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Разрешаем самоподписанные сертификаты (Neon, Supabase и др.)
+  }
+});
+
+// 2. Оборачиваем пул в адаптер Prisma v7
+const adapter = new PrismaPg(pool);
+
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+// 3. Создаем инстанс с передачей адаптера и сохранением кэша
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter: adapter,
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

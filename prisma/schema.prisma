@@ -17,6 +17,13 @@ model User {
   updatedAt         DateTime  @updatedAt
   resetTokenHash    String?
   resetTokenExpires DateTime?
+  deadlineCheckedAt DateTime?
+  // Ссылка на расписание в формате .ics (например, расписание группы МАИ) и время последней синхронизации
+  scheduleUrl       String?
+  scheduleSyncedAt  DateTime?
+  // Push-уведомления: утренняя сводка и вечернее напоминание о домашке
+  pushMorning       Boolean   @default(true)
+  pushEvening       Boolean   @default(true)
 
   subjects          Subject[]
   tasks             Task[]
@@ -32,6 +39,9 @@ model User {
   notifications     Notification[]
   questionAttempts  QuestionAttempt[]
   progressLogs      ProgressLog[]
+  lectures          Lecture[]
+  examSessions      ExamSession[]
+  pushSubscriptions PushSubscription[]
 
   @@index([email])
 }
@@ -58,6 +68,8 @@ model Subject {
   attachments Attachment[]
   events      CalendarEvent[]
   progressLogs ProgressLog[]
+  lectures    Lecture[]
+  examSessions ExamSession[]
 
   @@index([userId])
   @@index([userId, archived])
@@ -77,6 +89,10 @@ model Task {
   dueTime     String?
   priority    String    @default("MEDIUM")
   status      String    @default("PLANNED")
+  // TASK — обычная задача, HOMEWORK — домашка, заданная на паре
+  kind        String    @default("TASK")
+  // Начало пары, на которой задали домашку
+  lessonAt    DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -93,6 +109,7 @@ model Task {
   @@index([userId, dueDate])
   @@index([userId, status])
   @@index([userId, priority])
+  @@index([userId, kind])
   @@index([subjectId])
   @@index([title])
 }
@@ -161,6 +178,18 @@ model Question {
   status      String   @default("UNLEARNED")
   difficulty  String   @default("MEDIUM")
   sortOrder   Int      @default(0)
+  // THEORY — теоретический вопрос, PROBLEM — задача (для билетов в режиме экзамена)
+  kind        String   @default("THEORY")
+  // Номер билета из официального списка, если он есть
+  ticketNo    Int?
+  lectureId   String?
+  lecture     Lecture? @relation(fields: [lectureId], references: [id], onDelete: SetNull)
+  // Интервальное повторение (SM-2)
+  srsDue      DateTime?
+  srsInterval Int      @default(0)
+  srsEase     Float    @default(2.5)
+  srsReps     Int      @default(0)
+  srsLapses   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -170,6 +199,7 @@ model Question {
   attempts    QuestionAttempt[]
   comments    Comment[]
   tasks       Task[]
+  examItems   ExamItem[]
 
   @@index([userId])
   @@index([ticketId])
@@ -177,6 +207,9 @@ model Question {
   @@index([status])
   @@index([difficulty])
   @@index([text])
+  @@index([userId, srsDue])
+  @@index([lectureId])
+  @@index([subjectId, kind])
 }
 
 model Note {
@@ -231,12 +264,18 @@ model Attachment {
   note         Note?     @relation(fields: [noteId], references: [id], onDelete: Cascade)
   commentId      String?
   comment        Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  lectureId    String?
+  lecture      Lecture?  @relation(fields: [lectureId], references: [id], onDelete: Cascade)
+  examItemId   String?
+  examItem     ExamItem? @relation(fields: [examItemId], references: [id], onDelete: Cascade)
   createdAt    DateTime  @default(now())
 
   @@index([userId])
   @@index([subjectId])
   @@index([taskId])
   @@index([commentId])
+  @@index([lectureId])
+  @@index([examItemId])
   @@index([originalName])
 }
 
@@ -306,9 +345,18 @@ model CalendarEvent {
   endAt       DateTime?
   allDay      Boolean   @default(true)
   color       String?
+  // LECTURE | SEMINAR | LAB | TEST | CONSULT | EXAM | OTHER
+  kind        String    @default("OTHER")
+  location    String?
+  // null | WEEKLY | BIWEEKLY
+  recurrence  String?
+  repeatUntil DateTime?
+  // UID события из импортированного .ics — по нему повторный импорт обновляет пары, а не дублирует
+  externalId  String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  @@unique([userId, externalId])
   @@index([userId])
   @@index([userId, startAt])
 }
@@ -366,10 +414,13 @@ model QuestionAttempt {
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   knew       Boolean
+  // 0 — забыл, 1 — трудно, 2 — хорошо, 3 — легко
+  grade      Int?
   createdAt  DateTime @default(now())
 
   @@index([userId])
   @@index([questionId])
+  @@index([userId, createdAt])
 }
 
 model ProgressLog {
@@ -383,4 +434,93 @@ model ProgressLog {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+model Lecture {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  number    Int?
+  title     String
+  date      DateTime?
+  summary   String    @default("")
+  // Расшифровка записи (Whisper): строки «[мм:сс] текст», блоки по файлам
+  transcript String   @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  questions   Question[]
+  attachments Attachment[]
+
+  @@index([userId])
+  @@index([subjectId, date])
+}
+
+// Счётчики для ограничения частоты (вход, фоновые пересчёты) — общие для всех инстансов сервера
+model RateLimit {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+}
+
+
+// Пробный экзамен: билет (теория + задачи), подготовка, вопросы препода и итоговая оценка
+model ExamSession {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  ticketNo    Int?
+  prepMinutes Int       @default(40)
+  // PREP — подготовка, ANSWER — ответ по билету, EXTRA — вопросы препода, DONE — завершён
+  phase       String    @default("PREP")
+  score       Float?
+  grade       Int?
+  startedAt   DateTime  @default(now())
+  answerAt    DateTime?
+  finishedAt  DateTime?
+
+  items       ExamItem[]
+
+  @@index([userId, startedAt])
+  @@index([subjectId, startedAt])
+}
+
+model ExamItem {
+  id         String      @id @default(cuid())
+  examId     String
+  exam       ExamSession @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  // THEORY | PROBLEM — билет, EXTRA — дополнительный вопрос препода
+  role       String
+  position   Int
+  // Дополнительный вопрос связан с билетом (та же лекция или общие теги)
+  related    Boolean     @default(false)
+  // 0 — не смог, 1 — с трудом, 2 — хорошо, 3 — отлично
+  grade      Int?
+  note       String?
+
+  attachments Attachment[]
+
+  @@index([examId])
+  @@index([questionId])
+}
+
+// Подписка браузера/телефона на push-уведомления
+model PushSubscription {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }

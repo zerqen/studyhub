@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpen, CheckSquare, FileText, Hash, HelpCircle, ListTree, Loader2, NotebookPen, Paperclip, Search } from "lucide-react";
+import { BookOpen, CheckSquare, FileText, GraduationCap, Hash, HelpCircle, ListTree, Loader2, NotebookPen, Paperclip, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { globalSearch, type SearchHit } from "@/actions/search";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ const typeMeta: Record<SearchHit["type"], { label: string; icon: typeof Search }
   note: { label: "Заметка", icon: NotebookPen },
   file: { label: "Файл", icon: Paperclip },
   tag: { label: "Тег", icon: Hash },
+  lecture: { label: "Лекция", icon: GraduationCap },
 };
 
 export function SearchBox() {

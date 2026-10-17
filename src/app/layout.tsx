@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
@@ -9,6 +10,7 @@ const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-sans", d
 export const metadata: Metadata = {
   title: { default: "StudyHub", template: "%s · StudyHub" },
   description: "Предметы, вопросы, задачи и календарь для подготовки к сессии",
+  appleWebApp: { capable: true, title: "StudyHub", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
