@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { createReadStream } from "fs";
-import { stat } from "fs/promises";
-import path from "path";
-import { Readable } from "stream";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isRemoteStoragePath, uploadRoot } from "@/lib/files";
+import { isPrivateBlob, isRemoteStoragePath, openStored } from "@/lib/files";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
@@ -15,35 +11,26 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const file = await prisma.attachment.findFirst({ where: { id, userId: session.user.id } });
   if (!file) return new NextResponse("Not found", { status: 404 });
   const download = new URL(req.url).searchParams.get("download") === "1";
-  if (isRemoteStoragePath(file.storagePath)) {
-    if (!download) {
-      // Просмотр — прямо с CDN Vercel Blob: быстрее, и аудио/видео можно перематывать (Range-запросы)
-      return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=300" } });
-    }
-    // Скачивание — через сервер, чтобы файл сохранился с исходным именем
-    const remote = await fetch(file.storagePath);
-    if (!remote.ok || !remote.body) return new NextResponse("Missing file", { status: 404 });
-    return new NextResponse(remote.body, {
-      headers: {
-        "Content-Type": file.mimeType,
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
-        "Cache-Control": "private, max-age=3600",
-      },
-    });
+  const disposition = `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`;
+
+  // Публичный Blob: просмотр — прямо с CDN (быстрее, и аудио/видео перематывается через Range-запросы)
+  if (isRemoteStoragePath(file.storagePath) && !isPrivateBlob(file.storagePath) && !download) {
+    return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=300" } });
   }
-  const full = path.join(uploadRoot, path.basename(file.storagePath));
-  try {
-    await stat(full);
-  } catch {
-    return new NextResponse("Missing file", { status: 404 });
+
+  const stored = await openStored(file.storagePath);
+  if (!stored) {
+    const local = !isRemoteStoragePath(file.storagePath);
+    // Файл загружали при запуске на компьютере — он лежит в папке uploads там, а не в облаке
+    return new NextResponse(local ? "Файл был загружен на локальном сервере и в облачном хранилище его нет" : "Missing file", { status: 404 });
   }
-  const nodeStream = createReadStream(full);
-  const web = Readable.toWeb(nodeStream) as ReadableStream;
-  return new NextResponse(web, {
+  return new NextResponse(stored.body, {
     headers: {
       "Content-Type": file.mimeType,
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(file.originalName)}"`,
+      "Content-Disposition": disposition,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
+      ...(stored.size ? { "Content-Length": String(stored.size) } : {}),
     },
   });
 }

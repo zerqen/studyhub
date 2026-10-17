@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2, Paperclip, UploadCloud } from "lucide-react";
-import { DIRECT_UPLOAD_THRESHOLD, MAX_DIRECT_FILE_SIZE, maxServerSize } from "@/lib/constants";
+import { DIRECT_UPLOAD_THRESHOLD, MAX_DIRECT_FILE_SIZE, guessMime, maxServerSize } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useToast } from "../ui/toast";
 import { buttonClass } from "../ui/button";
@@ -23,24 +23,27 @@ export type UploadParent = {
 
 const KEYS = ["subjectId", "taskId", "subtaskId", "ticketId", "questionId", "noteId", "commentId", "lectureId", "examItemId"] as const;
 
-let directEnabled: Promise<boolean> | null = null;
+let directEnabled: Promise<{ enabled: boolean; access: "public" | "private" }> | null = null;
 function canUploadDirect() {
   directEnabled ??= fetch("/api/upload/blob")
     .then((r) => r.json())
-    .then((j: { enabled?: boolean }) => Boolean(j.enabled))
-    .catch(() => false);
+    .then((j: { enabled?: boolean; access?: string }) => ({ enabled: Boolean(j.enabled), access: j.access === "private" ? ("private" as const) : ("public" as const) }))
+    .catch(() => ({ enabled: false, access: "public" as const }));
   return directEnabled;
 }
 
 /** Обычные файлы — через сервер; большие (записи лекций) — напрямую в Vercel Blob */
 export async function uploadFile(file: File, parent: UploadParent | undefined, onProgress?: (pct: number) => void) {
-  if (!parent?.avatar && file.size > DIRECT_UPLOAD_THRESHOLD && (await canUploadDirect())) {
+  const mimeType = guessMime(file.name, file.type);
+  const direct = !parent?.avatar && file.size > DIRECT_UPLOAD_THRESHOLD ? await canUploadDirect() : null;
+  if (direct?.enabled) {
     if (file.size > MAX_DIRECT_FILE_SIZE) throw new Error(`«${file.name}» больше ${MAX_DIRECT_FILE_SIZE / 1024 / 1024} МБ`);
     const payload = Object.fromEntries(KEYS.filter((k) => parent?.[k]).map((k) => [k, parent![k]]));
     {
       const { upload } = await import("@vercel/blob/client");
       const blob = await upload(`studyhub/${file.name}`, file, {
-        access: "public",
+        access: direct.access,
+        contentType: mimeType,
         handleUploadUrl: "/api/upload/blob",
         clientPayload: JSON.stringify(payload),
         multipart: file.size > 50 * 1024 * 1024,
@@ -49,7 +52,7 @@ export async function uploadFile(file: File, parent: UploadParent | undefined, o
       const res = await fetch("/api/upload/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: blob.url, pathname: blob.pathname, name: file.name, mimeType: file.type, size: file.size, parent: payload }),
+        body: JSON.stringify({ url: blob.url, pathname: blob.pathname, name: file.name, mimeType, size: file.size, parent: payload }),
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? "Ошибка загрузки");
@@ -57,7 +60,7 @@ export async function uploadFile(file: File, parent: UploadParent | undefined, o
     }
   }
   // Без Vercel Blob (локальная разработка) всё идёт через сервер: записи — до 90 МБ, остальное — до 15 МБ
-  const limit = maxServerSize(file.type);
+  const limit = maxServerSize(mimeType);
   if (file.size > limit && !parent?.avatar) {
     throw new Error(`«${file.name}» больше ${limit / 1024 / 1024} МБ`);
   }

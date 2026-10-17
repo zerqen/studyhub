@@ -7,7 +7,7 @@ import { checkPrompt, OCR_PROMPT, questionsPrompt } from "@/lib/ai-prompts";
 import { normalizeFeedback, normalizeQuestions, parseModelJson, type AnswerFeedback, type GeneratedQuestion } from "@/lib/ai-parse";
 import { toParagraphs, upsertBlock, type Segment } from "@/lib/transcript";
 import { aiQuota } from "@/lib/ai-quota";
-import { isRemoteStoragePath, uploadRoot } from "@/lib/files";
+import { isPrivateBlob, isRemoteStoragePath, readStored } from "@/lib/files";
 
 /** wait — лимит бесплатного тарифа, повторить через столько секунд */
 export type AiResult<T> = ActionResult<{ wait?: number; value?: T }>;
@@ -84,13 +84,11 @@ export async function recognizePhoto(attachmentId: string): Promise<AiResult<str
     if (!file) throw new Error("Фото не найдено");
     if (!file.mimeType.startsWith("image/")) throw new Error("Это не фото");
     let url = file.storagePath;
-    if (!isRemoteStoragePath(url)) {
-      // Локальная разработка: отправляем картинку внутри запроса (у Groq лимит ~4 МБ)
-      if (file.size > 3.5 * 1024 * 1024) throw new Error("Фото больше 3,5 МБ — на локальном сервере его не отправить, проверь на опубликованном сайте");
-      const { readFile } = await import("fs/promises");
-      const path = await import("path");
-      const buf = await readFile(path.join(uploadRoot, path.basename(file.storagePath)));
-      url = `data:${file.mimeType};base64,${buf.toString("base64")}`;
+    // Публичный Blob Groq скачает сам; локальный файл или приватное хранилище — передаём картинку внутри запроса (лимит ~4 МБ)
+    if (!isRemoteStoragePath(url) || isPrivateBlob(url)) {
+      if (file.size > 3.5 * 1024 * 1024) throw new Error("Фото больше 3,5 МБ — его не получится передать модели. Сожми фото или сфотографируй с меньшим разрешением");
+      const bytes = await readStored(file.storagePath);
+      url = `data:${file.mimeType};base64,${Buffer.from(bytes).toString("base64")}`;
     }
     const { text } = await groqVision(OCR_PROMPT, url);
     return text.trim().replace(/^```(?:markdown|md)?\s*/i, "").replace(/\s*```$/, "");

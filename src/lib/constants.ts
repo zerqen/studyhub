@@ -103,7 +103,42 @@ export const ALLOWED_MIME = new Set([
   "video/webm",
   "video/quicktime",
   "application/zip",
+  "image/heic",
+  "image/heif",
+  "image/svg+xml",
+  "text/markdown",
+  "text/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/x-zip-compressed",
+  "application/vnd.rar",
+  "application/x-7z-compressed",
+  "audio/flac",
+  "audio/x-flac",
+  "audio/opus",
+  "audio/amr",
+  "audio/3gpp",
+  "video/3gpp",
+  "video/x-matroska",
 ]);
+
+const BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", heic: "image/heic", heif: "image/heif", svg: "image/svg+xml",
+  pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  txt: "text/plain", md: "text/markdown", csv: "text/csv", zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed",
+  mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/x-m4a", aac: "audio/aac", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/opus", flac: "audio/flac",
+  weba: "audio/webm", amr: "audio/amr", "3gp": "video/3gpp", mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", mkv: "video/x-matroska",
+};
+
+/** Тип файла: браузер иногда присылает пустой или нестандартный — тогда угадываем по расширению */
+export function guessMime(name: string, type?: string | null) {
+  const t = (type ?? "").split(";")[0].trim().toLowerCase();
+  if (t && ALLOWED_MIME.has(t)) return t;
+  const ext = name.toLowerCase().split(".").pop() ?? "";
+  return BY_EXT[ext] ?? (t || "application/octet-stream");
+}
 
 export function labelOf<T extends { value: string; label: string }>(list: readonly T[], value?: string | null) {
   return list.find((x) => x.value === value)?.label ?? value ?? "—";

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isRemoteStoragePath, uploadRoot } from "@/lib/files";
+import { readStored } from "@/lib/files";
 import { aiEnabled, groqTranscribe, GroqLimitError, WHISPER_MAX_BYTES, WHISPER_TYPES } from "@/lib/groq";
 import { aiQuota } from "@/lib/ai-quota";
 
@@ -39,15 +39,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, split: true, error: "Файл нужно разбить на части" });
       }
       let bytes: ArrayBuffer;
-      if (isRemoteStoragePath(file.storagePath)) {
-        const res = await fetch(file.storagePath, { signal: AbortSignal.timeout(120_000) });
-        if (!res.ok) return NextResponse.json({ ok: false, error: "Не удалось скачать запись" }, { status: 502 });
-        bytes = await res.arrayBuffer();
-      } else {
-        const { readFile } = await import("fs/promises");
-        const path = await import("path");
-        const buf = await readFile(path.join(uploadRoot, path.basename(file.storagePath)));
-        bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      try {
+        bytes = await readStored(file.storagePath);
+      } catch {
+        return NextResponse.json({ ok: false, error: "Не удалось скачать запись из хранилища" }, { status: 502 });
       }
       audio = new Blob([bytes], { type: file.mimeType });
       name = file.originalName.replace(/\.(m4a|x-m4a)$/i, ".m4a");
