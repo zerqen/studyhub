@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowRight, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, CornerDownLeft, ListChecks, MoreHorizontal, Paperclip, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { createTask, deleteTask, moveTaskDate, toggleTaskDone } from "@/actions/tasks";
@@ -476,7 +477,18 @@ function TaskRow({
   showDate = true,
   danger,
 }: RowProps & { task: Task; showDate?: boolean; danger?: boolean }) {
-  const [menu, setMenu] = useState(false);
+  // Меню рисуется поверх страницы (порталом), чтобы его не обрезала карточка списка
+  const [menu, setMenu] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [menu]);
   const [dx, setDx] = useState(0);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
   const done = closed(task.status);
@@ -591,33 +603,53 @@ function TaskRow({
             </ul>
           ) : null}
         </div>
-        <div className="relative flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-          <Button variant="ghost" size="icon-sm" aria-label="Действия" onClick={() => setMenu((m) => !m)}>
+        <div className={cn("flex shrink-0 gap-0.5 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100", menu && "sm:opacity-100")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Действия"
+            aria-expanded={Boolean(menu)}
+            onClick={(e) => {
+              if (menu) return setMenu(null);
+              const r = e.currentTarget.getBoundingClientRect();
+              // Внизу экрана меню открывается вверх
+              const up = r.bottom + 190 > window.innerHeight;
+              const left = Math.max(8, Math.min(r.right - 192, window.innerWidth - 200));
+              setMenu(up ? { bottom: window.innerHeight - r.top + 6, left } : { top: r.bottom + 6, left });
+            }}
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
-          {menu ? (
-            <>
-              <button className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(false)} aria-hidden tabIndex={-1} />
-              <div className="absolute right-0 top-9 z-40 w-48 animate-pop-in overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-pop">
-                {!done ? (
-                  <>
-                    <MenuButton icon={CalendarClock} onClick={() => { setMenu(false); onMove(task, addDaysKey(todayKey, 1)); }}>
-                      На завтра
+          {menu
+            ? createPortal(
+                <>
+                  <button className="fixed inset-0 z-[60] cursor-default" onClick={() => setMenu(null)} aria-hidden tabIndex={-1} />
+                  <div
+                    role="menu"
+                    className="fixed z-[61] w-48 animate-pop-in overflow-hidden rounded-xl border border-line bg-surface p-1 shadow-pop"
+                    style={{ top: menu.top, bottom: menu.bottom, left: menu.left }}
+                  >
+                    {!done ? (
+                      <>
+                        <MenuButton icon={CalendarClock} onClick={() => { setMenu(null); onMove(task, addDaysKey(todayKey, 1)); }}>
+                          На завтра
+                        </MenuButton>
+                        <MenuButton icon={CalendarClock} onClick={() => { setMenu(null); onMove(task, addDaysKey(key && key > todayKey ? key : todayKey, 7)); }}>
+                          На неделю позже
+                        </MenuButton>
+                      </>
+                    ) : null}
+                    <MenuButton icon={Pencil} onClick={() => { setMenu(null); onEdit(task); }}>
+                      Изменить
                     </MenuButton>
-                    <MenuButton icon={CalendarClock} onClick={() => { setMenu(false); onMove(task, addDaysKey(key && key > todayKey ? key : todayKey, 7)); }}>
-                      На неделю позже
+                    <MenuButton icon={Trash2} danger onClick={() => { setMenu(null); onRemove(task); }}>
+                      Удалить
                     </MenuButton>
-                  </>
-                ) : null}
-                <MenuButton icon={Pencil} onClick={() => { setMenu(false); onEdit(task); }}>
-                  Изменить
-                </MenuButton>
-                <MenuButton icon={Trash2} danger onClick={() => { setMenu(false); onRemove(task); }}>
-                  Удалить
-                </MenuButton>
-              </div>
-            </>
-          ) : null}
+                  </div>
+                </>,
+                document.body,
+              )
+            : null}
         </div>
       </div>
     </li>

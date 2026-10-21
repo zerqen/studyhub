@@ -22,11 +22,23 @@ export class GroqLimitError extends Error {
 }
 
 export function aiEnabled() {
-  return Boolean(process.env.GROQ_API_KEY);
+  return Boolean(process.env.GROQ_API_KEY?.trim());
+}
+
+/** Понятная ошибка для 401/403: неверный ключ и блокировка по региону — разные вещи */
+async function authError(res: Response) {
+  const detail = await errorText(res);
+  if (res.status === 401) {
+    return new Error(`Groq не принял ключ (401: ${detail}). Ключ должен начинаться с gsk_ и быть вставлен целиком, без кавычек и пробелов. После изменения переменной в Vercel нужен Redeploy.`);
+  }
+  return new Error(
+    `Groq отказал в доступе (403: ${detail}). Если сайт запущен на твоём компьютере (npm run dev) из России — Groq блокирует такие запросы; на Vercel (сервер в Стокгольме) это работает.`,
+  );
 }
 
 function key() {
-  const k = process.env.GROQ_API_KEY;
+  // Частая ошибка — ключ вставлен с кавычками или пробелом в конце
+  const k = process.env.GROQ_API_KEY?.trim().replace(/^["']|["']$/g, "").trim();
   if (!k) throw new Error("ИИ не настроен: добавь GROQ_API_KEY в переменные окружения");
   return k;
 }
@@ -77,7 +89,7 @@ export async function groqChat(
       lastError = "Модель вернула пустой ответ";
       continue;
     }
-    if (res.status === 401 || res.status === 403) throw new Error("Groq не принял ключ — проверь GROQ_API_KEY");
+    if (res.status === 401 || res.status === 403) throw await authError(res);
     if (res.status === 429) {
       const wait = retryAfter(res);
       if (!limited || wait < limited.retryAfter) limited = new GroqLimitError(wait);
@@ -118,7 +130,7 @@ export async function groqTranscribe(audio: Blob, filename: string, prompt?: str
     signal: AbortSignal.timeout(280_000),
   });
   if (res.status === 429) throw new GroqLimitError(retryAfter(res));
-  if (res.status === 401 || res.status === 403) throw new Error("Groq не принял ключ — проверь GROQ_API_KEY");
+  if (res.status === 401 || res.status === 403) throw await authError(res);
   if (res.status === 413) throw new Error("Файл слишком большой для бесплатного тарифа — будет разбит на части");
   if (!res.ok) throw new Error(`Расшифровка не удалась: ${await errorText(res)}`);
   const j = (await res.json()) as { segments?: WhisperSegment[]; duration?: number; text?: string };
@@ -176,7 +188,7 @@ export async function groqAgentStep(messages: AgentMessage[], tools: ToolSpec[])
       lastError = "Ассистент вернул пустой ответ";
       continue;
     }
-    if (res.status === 401 || res.status === 403) throw new Error("Groq не принял ключ — проверь GROQ_API_KEY");
+    if (res.status === 401 || res.status === 403) throw await authError(res);
     if (res.status === 429) {
       const wait = retryAfter(res);
       if (!limited || wait < limited.retryAfter) limited = new GroqLimitError(wait);
