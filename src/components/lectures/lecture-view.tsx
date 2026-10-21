@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, Eye, Headphones, Image as ImageIcon, Loader2, Pencil, Play, Plus, ScanText, Sparkles, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Eye, Headphones, Image as ImageIcon, Loader2, Maximize2, MonitorPlay, Pencil, Play, Plus, ScanText, Sparkles, Trash2, X } from "lucide-react";
 import { deleteLecture, saveLectureSummary } from "@/actions/lectures";
 import { recognizePhoto } from "@/actions/ai";
 import { transcriptPlainText } from "@/lib/transcript";
@@ -22,6 +22,8 @@ import { LectureForm } from "./lecture-form";
 import { TranscriptPanel } from "../ai/transcript-panel";
 import { QuestionGenerator } from "../ai/question-generator";
 import { callWithWait, useAiEnabled } from "../ai/use-ai";
+import { InteractiveFrame } from "../interactive/interactive-frame";
+import { InteractiveForm } from "../interactive/interactive-form";
 
 type FileItem = { id: string; originalName: string; mimeType: string; size: number };
 
@@ -32,8 +34,9 @@ type LectureData = {
   date: string;
   summary: string;
   transcript: string;
-  subject: { id: string; name: string; emoji: string; color: string };
+  subject: { id: string; name: string; emoji: string; color: string; selfStudy?: boolean };
   attachments: FileItem[];
+  interactives: { id: string; title: string; description: string; updatedAt: string }[];
   questions: StudyQuestion[];
 };
 
@@ -47,6 +50,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
   const [viewer, setViewer] = useState<number | null>(null);
   const [transcript, setTranscript] = useState(lecture.transcript);
   const [generating, setGenerating] = useState(false);
+  const [addingScheme, setAddingScheme] = useState(false);
   // Конспект: актуальный текст из редактора и «перезапуск» редактора, когда ИИ дописал текст
   const summaryRef = useRef(lecture.summary);
   const [summarySeed, setSummarySeed] = useState({ key: 0, text: lecture.summary });
@@ -55,6 +59,10 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
   const router = useRouter();
   const toast = useToast();
 
+  // Тема направления «Изучаю»: без записи и фото тетради, слова — «тема»
+  const topic = Boolean(lecture.subject.selfStudy);
+  const noun = topic ? "Тема" : "Лекция";
+  const backHref = topic ? `/learn/${lecture.subject.id}` : `/subjects/${lecture.subject.id}?tab=lectures`;
   const photos = lecture.attachments.filter((a) => a.mimeType.startsWith("image/"));
   const media = lecture.attachments.filter((a) => a.mimeType.startsWith("audio/") || a.mimeType.startsWith("video/"));
   const other = lecture.attachments.filter((a) => !photos.includes(a) && !media.includes(a));
@@ -89,7 +97,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href={`/subjects/${lecture.subject.id}?tab=lectures`} className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+      <Link href={backHref} className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
         <ChevronLeft className="h-4 w-4" /> {lecture.subject.emoji} {lecture.subject.name}
       </Link>
 
@@ -99,10 +107,10 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
             {lecture.number ?? "—"}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-xs text-muted">Лекция {lecture.number ?? ""}{lecture.date ? ` · ${formatDate(lecture.date, "d MMMM yyyy")}` : ""}</div>
+            <div className="text-xs text-muted">{noun} {lecture.number ?? ""}{lecture.date ? ` · ${formatDate(lecture.date, "d MMMM yyyy")}` : ""}</div>
             <h1 className="mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">{lecture.title}</h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {media.length ? (
+              {media.length && !topic ? (
                 <Badge>
                   <Headphones className="h-3 w-3" /> {media.length} запис{media.length === 1 ? "ь" : "и"}
                 </Badge>
@@ -132,6 +140,8 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-5">
+          {!topic ? (
+            <>
           {/* Запись лекции */}
           <section className="card p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -157,10 +167,46 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
             transcript={transcript}
             onChange={setTranscript}
           />
+            </>
+          ) : null}
 
           {/* Конспект */}
           <SummaryEditor key={summarySeed.key} lectureId={lecture.id} initial={summarySeed.text} onText={(t) => (summaryRef.current = t)} />
 
+          {/* Интерактивные схемы — запускаются прямо в лекции */}
+          <section className="card p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <MonitorPlay className="h-4 w-4 text-muted" /> Интерактивы {lecture.interactives.length ? <span className="font-normal text-muted">{lecture.interactives.length}</span> : null}
+              </h2>
+              <Button size="sm" variant="secondary" onClick={() => setAddingScheme(true)}>
+                <Plus className="h-3.5 w-3.5" /> Схема
+              </Button>
+            </div>
+            {lecture.interactives.length ? (
+              <div className="space-y-4">
+                {lecture.interactives.map((it) => (
+                  <div key={it.id}>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <Link href={`/interactives/${it.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-accent">
+                        {it.title}
+                      </Link>
+                      <Link href={`/interactives/${it.id}`} className="text-muted hover:text-fg" title="Открыть отдельно" aria-label="Открыть отдельно">
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                    {it.description ? <p className="mb-2 text-xs text-muted">{it.description}</p> : null}
+                    <InteractiveFrame id={it.id} title={it.title} version={it.updatedAt} autoload={false} height="min(70vh, 620px)" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">Симуляции и схемы в HTML — например, из чата с Claude. Запускаются здесь же, в защищённой рамке.</p>
+            )}
+          </section>
+
+          {!topic ? (
+            <>
           {/* Фото тетради */}
           <section className="card p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -191,11 +237,16 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
               <FileUploader parent={{ lectureId: lecture.id }} camera accept="image/*" label="Сфотографируй или загрузи страницы конспекта" hint="Можно выбрать сразу несколько фото" />
             )}
           </section>
+            </>
+          ) : null}
 
-          {other.length ? (
+          {topic || other.length ? (
             <section className="card p-4">
-              <h2 className="mb-3 text-sm font-semibold">Материалы</h2>
-              <FileGrid files={other} />
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold">Материалы</h2>
+                {topic ? <FileUploader parent={{ lectureId: lecture.id }} compact label="Добавить" /> : null}
+              </div>
+              {other.length ? <FileGrid files={other} /> : <p className="text-sm text-muted">PDF, картинки, книги по теме. Ссылки на видео и курсы удобно держать прямо в конспекте.</p>}
             </section>
           ) : null}
         </div>
@@ -203,7 +254,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
         <aside className="space-y-4">
           <section className="card">
             <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-              <h2 className="text-sm font-semibold">Вопросы по лекции</h2>
+              <h2 className="text-sm font-semibold">Вопросы по {topic ? "теме" : "лекции"}</h2>
               <div className="flex items-center gap-2">
                 {ai ? (
                   <button onClick={() => setGenerating(true)} className="text-muted hover:text-accent" aria-label="Сделать вопросы ИИ" title="Сделать вопросы из конспекта и расшифровки">
@@ -229,7 +280,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
                 ))
               ) : (
                 <div className="space-y-2 px-2.5 py-3">
-                  <p className="text-sm text-muted">Запиши вопросы, которые могут спросить по этой лекции.</p>
+                  <p className="text-sm text-muted">{topic ? "Вопросы для самопроверки — попадут в общее повторение." : "Запиши вопросы, которые могут спросить по этой лекции."}</p>
                   {ai && sourceText.length > 80 ? (
                     <Button size="sm" variant="secondary" className="w-full" onClick={() => setGenerating(true)}>
                       <Sparkles className="h-3.5 w-3.5" /> Сделать вопросы из конспекта
@@ -241,7 +292,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
             {lecture.questions.length ? (
               <div className="border-t border-line p-3">
                 <Button className="w-full" variant={training ? "secondary" : "primary"} onClick={() => setTraining((t) => !t)}>
-                  {training ? <X className="h-4 w-4" /> : <Play className="h-4 w-4" />} {training ? "Закрыть тренировку" : "Тренировать лекцию"}
+                  {training ? <X className="h-4 w-4" /> : <Play className="h-4 w-4" />} {training ? "Закрыть тренировку" : topic ? "Тренировать тему" : "Тренировать лекцию"}
                 </Button>
               </div>
             ) : null}
@@ -251,7 +302,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
             {prev ? (
               <Link href={`/lectures/${prev.id}`} className="card card-hover p-3 text-sm">
                 <span className="flex items-center gap-1 text-xs text-muted">
-                  <ChevronLeft className="h-3 w-3" /> Лекция {prev.number}
+                  <ChevronLeft className="h-3 w-3" /> {noun} {prev.number}
                 </span>
                 <span className="mt-0.5 line-clamp-2">{prev.title}</span>
               </Link>
@@ -261,7 +312,7 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
             {next ? (
               <Link href={`/lectures/${next.id}`} className="card card-hover p-3 text-right text-sm">
                 <span className="flex items-center justify-end gap-1 text-xs text-muted">
-                  Лекция {next.number} <ChevronRight className="h-3 w-3" />
+                  {noun} {next.number} <ChevronRight className="h-3 w-3" />
                 </span>
                 <span className="mt-0.5 line-clamp-2">{next.title}</span>
               </Link>
@@ -278,13 +329,16 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
 
       {viewer !== null && photos[viewer] ? <PhotoViewer photos={photos} index={viewer} onChange={setViewer} onClose={() => setViewer(null)} /> : null}
 
-      <Modal open={editing} onClose={() => setEditing(false)} title="Изменить лекцию">
-        <LectureForm id={lecture.id} subjectId={lecture.subject.id} initial={{ title: lecture.title, number: lecture.number, date: lecture.date }} onDone={() => setEditing(false)} />
+      <Modal open={addingScheme} onClose={() => setAddingScheme(false)} title={topic ? "Схема к теме" : "Схема к лекции"} description="HTML запускается изолированно: у него нет доступа к твоему аккаунту">
+        <InteractiveForm lectureId={lecture.id} subjectId={lecture.subject.id} onDone={() => setAddingScheme(false)} />
+      </Modal>
+      <Modal open={editing} onClose={() => setEditing(false)} title={topic ? "Изменить тему" : "Изменить лекцию"}>
+        <LectureForm id={lecture.id} subjectId={lecture.subject.id} initial={{ title: lecture.title, number: lecture.number, date: lecture.date }} topic={topic} onDone={() => setEditing(false)} />
       </Modal>
       <Modal
         open={generating}
         onClose={() => setGenerating(false)}
-        title="Вопросы из лекции"
+        title={topic ? "Вопросы по теме" : "Вопросы из лекции"}
         description="ИИ составит вопросы с ответами по конспекту и расшифровке — выбери, какие добавить"
         className="sm:max-w-2xl"
       >
@@ -300,22 +354,22 @@ export function LectureView({ lecture, prev, next }: { lecture: LectureData; pre
           />
         ) : null}
       </Modal>
-      <Modal open={adding} onClose={() => setAdding(false)} title="Вопрос по лекции">
+      <Modal open={adding} onClose={() => setAdding(false)} title={topic ? "Вопрос по теме" : "Вопрос по лекции"}>
         <QuestionForm subjectId={lecture.subject.id} lectureId={lecture.id} onDone={() => setAdding(false)} />
       </Modal>
       <ConfirmDialog
         open={deleting}
         onClose={() => setDeleting(false)}
-        title="Удалить лекцию?"
-        text="Записи и фото лекции будут удалены. Вопросы останутся в предмете."
+        title={topic ? "Удалить тему?" : "Удалить лекцию?"}
+        text={topic ? "Конспект и файлы темы будут удалены. Вопросы останутся в направлении." : "Записи и фото лекции будут удалены. Вопросы останутся в предмете."}
         onConfirm={async () => {
           const r = await deleteLecture(lecture.id);
           if (!r.ok) {
             toast.push(r.error, "err");
             return;
           }
-          toast.push("Лекция удалена");
-          router.push(`/subjects/${lecture.subject.id}?tab=lectures`);
+          toast.push(topic ? "Тема удалена" : "Лекция удалена");
+          router.push(backHref);
         }}
       />
     </div>

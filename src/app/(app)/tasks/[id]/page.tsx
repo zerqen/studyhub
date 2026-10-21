@@ -21,7 +21,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         contextualComments: { include: { attachments: fileSelect }, orderBy: { createdAt: "asc" } },
       },
     }),
-    prisma.subject.findMany({ where: { userId: user.id, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.subject.findMany({ where: { userId: user.id, archived: false, selfStudy: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.question.findMany({ where: { userId: user.id }, select: { id: true, text: true, subjectId: true }, orderBy: { createdAt: "desc" } }),
   ]);
   if (!task) notFound();

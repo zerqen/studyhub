@@ -32,7 +32,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),
-    prisma.subject.findMany({ where: { userId: user.id, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.subject.findMany({ where: { userId: user.id, archived: false, selfStudy: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.question.findMany({ where: { userId: user.id }, select: { id: true, text: true, subjectId: true }, orderBy: { createdAt: "desc" } }),
   ]);
   return <TasksBoard tag={sp.tag} subjects={subjects} questions={questions} tasks={JSON.parse(JSON.stringify(tasks))} />;

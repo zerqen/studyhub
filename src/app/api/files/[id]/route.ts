@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { activeUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isPrivateBlob, isRemoteStoragePath, openStored } from "@/lib/files";
 
+/** Типы, которые браузер исполняет как документ со скриптами */
+const ACTIVE_TYPES = /svg|html|xml|javascript/i;
+
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
+  const userId = await activeUserId();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
   const { id } = await ctx.params;
-  const file = await prisma.attachment.findFirst({ where: { id, userId: session.user.id } });
+  const file = await prisma.attachment.findFirst({ where: { id, userId } });
   if (!file) return new NextResponse("Not found", { status: 404 });
   const download = new URL(req.url).searchParams.get("download") === "1";
   const disposition = `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`;
@@ -29,6 +31,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       "Content-Type": file.mimeType,
       "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
+      // SVG/HTML/XML могут содержать скрипты: открываем их в «песочнице» без доступа к сайту и входу
+      ...(ACTIVE_TYPES.test(file.mimeType) ? { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'" } : {}),
       "Cache-Control": "private, max-age=3600",
       ...(stored.size ? { "Content-Length": String(stored.size) } : {}),
     },

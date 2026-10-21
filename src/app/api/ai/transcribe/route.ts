@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { activeUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { readStored } from "@/lib/files";
 import { aiEnabled, groqTranscribe, GroqLimitError, WHISPER_MAX_BYTES, WHISPER_TYPES } from "@/lib/groq";
@@ -19,8 +18,7 @@ const MAX_CHUNK = 4.4 * 1024 * 1024;
  * Ответ: { ok, segments, duration } | { ok: false, wait } | { ok: false, error, split }
  */
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const userId = session?.user?.id;
+  const userId = await activeUserId();
   if (!userId) return NextResponse.json({ ok: false, error: "Нужно войти в аккаунт" }, { status: 401 });
   if (!aiEnabled()) return NextResponse.json({ ok: false, error: "ИИ не настроен: добавь GROQ_API_KEY" }, { status: 400 });
 

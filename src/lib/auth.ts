@@ -5,6 +5,9 @@ import { prisma } from "./prisma";
 import { loginSchema } from "./validations";
 import { consumeLoginAttempt } from "./rate-limit";
 
+/** Текст ошибки входа для аккаунта, который ещё не подтверждён */
+export const PENDING_ERROR = "Аккаунт ждёт подтверждения. Доступ откроется, когда его одобрят.";
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 14 },
   pages: {
@@ -20,9 +23,9 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials, req) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
-        const ip =
-          (req as { headers?: { "x-forwarded-for"?: string } })?.headers?.["x-forwarded-for"] ??
-          "local";
+        // IP клиента: Vercel кладёт его в x-real-ip; в x-forwarded-for берём первый адрес
+        const headers = (req as { headers?: Record<string, string | undefined> })?.headers ?? {};
+        const ip = headers["x-real-ip"] ?? headers["x-forwarded-for"]?.split(",")[0]?.trim() ?? "local";
         if (!(await consumeLoginAttempt(`${ip}:${parsed.data.email}`))) {
           throw new Error("Слишком много попыток. Подождите минуту.");
         }
@@ -30,6 +33,7 @@ export const authOptions: NextAuthOptions = {
         if (!user) return null;
         const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!ok) return null;
+        if (!user.approved) throw new Error(PENDING_ERROR);
         return {
           id: user.id,
           email: user.email,

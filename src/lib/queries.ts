@@ -13,9 +13,9 @@ export async function getDashboard(userId: string) {
   // Границы «сегодня» по Москве — сервер Vercel живёт в UTC
   const mskStart = new Date(`${dayKey(now)}T00:00:00+03:00`);
   const mskEnd = addDays(mskStart, 1);
-  const [subjects, tasks, questionCounts, notes, dueCount, newCount, events, activity] = await Promise.all([
+  const [subjects, tasks, questionCounts, notes, dueCount, newCount, events, activity, recentTopics] = await Promise.all([
     prisma.subject.findMany({
-      where: { userId, archived: false },
+      where: { userId, archived: false, selfStudy: false },
       select: {
         id: true,
         name: true,
@@ -55,6 +55,13 @@ export async function getDashboard(userId: string) {
     prisma.question.count({ where: { userId, srsReps: 0 } }),
     getScheduleEvents(userId, mskStart, mskEnd),
     getActivity(userId, 140),
+    // «Изучаю»: последние темы саморазвития — без счётчиков и целей
+    prisma.lecture.findMany({
+      where: { userId, subject: { selfStudy: true, archived: false } },
+      orderBy: { updatedAt: "desc" },
+      take: 3,
+      select: { id: true, title: true, updatedAt: true, subject: { select: { name: true, emoji: true, color: true } } },
+    }),
   ]);
 
   const open = tasks.filter((t) => t.status !== "DONE");
@@ -93,6 +100,7 @@ export async function getDashboard(userId: string) {
       .filter((t) => t.kind === "HOMEWORK" && ((t.dueDate && t.dueDate >= addDays(mskStart, -1) && t.dueDate < mskEnd) || (t.lessonAt && t.lessonAt >= mskStart && t.lessonAt < mskEnd)))
       .map((t) => ({ id: t.id, title: t.title, status: t.status, subjectId: t.subjectId, dueDate: t.dueDate?.toISOString() ?? null, dueTime: t.dueTime, lessonAt: t.lessonAt?.toISOString() ?? null })),
     activity,
+    recentTopics,
     totalQuestions,
     doneTasks: tasks.filter((t) => t.status === "DONE").length,
     totalTasks: tasks.length,

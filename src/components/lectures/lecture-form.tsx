@@ -12,15 +12,18 @@ export function LectureForm({
   subjectId,
   initial,
   onDone,
+  topic,
 }: {
   id?: string;
   subjectId: string;
   initial?: { title?: string; number?: number | null; date?: string };
   onDone?: () => void;
+  /** Тема направления «Изучаю»: без даты, слова «тема» вместо «лекция» */
+  topic?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [number, setNumber] = useState(initial?.number != null ? String(initial.number) : "");
-  const [date, setDate] = useState(initial?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(initial?.date ?? (topic ? "" : new Date().toISOString().slice(0, 10)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
   const toast = useToast();
@@ -36,7 +39,7 @@ export function LectureForm({
       setErr(res.error);
       return;
     }
-    toast.push(id ? "Лекция обновлена" : "Лекция добавлена");
+    toast.push(topic ? (id ? "Тема обновлена" : "Тема добавлена") : id ? "Лекция обновлена" : "Лекция добавлена");
     onDone?.();
     if (!id && res.data && "id" in res.data) router.push(`/lectures/${res.data.id}`);
   }
@@ -44,9 +47,9 @@ export function LectureForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <Field label="Тема" error={err}>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus placeholder="Например, Пределы последовательностей" />
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus placeholder={topic ? "Например, Ряды Фурье" : "Например, Пределы последовательностей"} />
       </Field>
-      <div className="grid grid-cols-[6rem_1fr] gap-3">
+      <div className={topic && !id ? "hidden" : "grid grid-cols-[6rem_1fr] gap-3"}>
         <Field label="Номер" hint={id ? undefined : "Пусто — следующий"}>
           <Input type="number" min={0} value={number} onChange={(e) => setNumber(e.target.value)} />
         </Field>
@@ -55,7 +58,7 @@ export function LectureForm({
         </Field>
       </div>
       <Button type="submit" loading={busy} className="w-full">
-        {id ? "Сохранить" : "Создать лекцию"}
+        {id ? "Сохранить" : topic ? "Создать тему" : "Создать лекцию"}
       </Button>
     </form>
   );

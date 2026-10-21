@@ -52,7 +52,8 @@ export async function importIcsText(userId: string, text: string, options: Impor
 
   // 1. Предметы: сопоставляем по названию, недостающие создаём
   const subjects = await prisma.subject.findMany({
-    where: { userId },
+    // Направления «Изучаю» в расписании не участвуют
+    where: { userId, selfStudy: false },
     select: { id: true, name: true, teacher: true, examDate: true, archived: true },
   });
   type SubjectRow = (typeof subjects)[number];

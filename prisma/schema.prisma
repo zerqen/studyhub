@@ -15,8 +15,8 @@ model User {
   avatarPath        String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  resetTokenHash    String?
-  resetTokenExpires DateTime?
+  // Доступ к сайту: новые аккаунты ждут, пока approved не станет true (меняется вручную в Supabase)
+  approved          Boolean   @default(false)
   deadlineCheckedAt DateTime?
   // Ссылка на расписание в формате .ics (например, расписание группы МАИ) и время последней синхронизации
   scheduleUrl       String?
@@ -42,6 +42,7 @@ model User {
   lectures          Lecture[]
   examSessions      ExamSession[]
   pushSubscriptions PushSubscription[]
+  interactives      Interactive[]
 
   @@index([email])
 }
@@ -58,6 +59,12 @@ model Subject {
   type        String   @default("EXAM")
   examDate    DateTime?
   archived    Boolean  @default(false)
+  // Направление саморазвития («Изучаю»): не предмет вуза, темы — это его лекции
+  selfStudy   Boolean  @default(false)
+  // Направление может быть связано с предметом вуза (доп. матан → Матанализ)
+  linkedSubjectId String?
+  linkedSubject   Subject?  @relation("SubjectLinks", fields: [linkedSubjectId], references: [id], onDelete: SetNull)
+  tracks          Subject[] @relation("SubjectLinks")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -70,10 +77,13 @@ model Subject {
   progressLogs ProgressLog[]
   lectures    Lecture[]
   examSessions ExamSession[]
+  interactives Interactive[]
 
   @@index([userId])
   @@index([userId, archived])
   @@index([userId, examDate])
+  @@index([userId, selfStudy])
+  @@index([linkedSubjectId])
 }
 
 model Task {
@@ -451,11 +461,33 @@ model Lecture {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  questions   Question[]
-  attachments Attachment[]
+  questions    Question[]
+  attachments  Attachment[]
+  interactives Interactive[]
 
   @@index([userId])
   @@index([subjectId, date])
+}
+
+// Интерактивная схема/симуляция: HTML-страница, которая запускается на сайте в изолированной рамке
+model Interactive {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  lectureId String?
+  lecture   Lecture? @relation(fields: [lectureId], references: [id], onDelete: SetNull)
+  title     String
+  description String @default("")
+  html      String
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([subjectId])
+  @@index([lectureId])
 }
 
 // Счётчики для ограничения частоты (вход, фоновые пересчёты) — общие для всех инстансов сервера

@@ -8,7 +8,7 @@ async function main() {
   const user = await prisma.user.upsert({
     where: { email },
     update: {},
-    create: { email, name: "Демо студент", passwordHash: await bcrypt.hash("studyhub-demo", 12) },
+    create: { email, name: "Демо студент", approved: true, passwordHash: await bcrypt.hash("studyhub-demo", 12) },
   });
   const subject = await prisma.subject.upsert({
     where: { id: "demo-subject" },

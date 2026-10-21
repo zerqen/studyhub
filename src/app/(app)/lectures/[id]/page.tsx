@@ -19,8 +19,9 @@ export default async function LecturePage({ params }: { params: Promise<{ id: st
       date: true,
       summary: true,
       transcript: true,
-      subject: { select: { id: true, name: true, emoji: true, color: true } },
+      subject: { select: { id: true, name: true, emoji: true, color: true, selfStudy: true } },
       attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, size: true } },
+      interactives: { orderBy: { createdAt: "asc" }, select: { id: true, title: true, description: true, updatedAt: true } },
       questions: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         select: {

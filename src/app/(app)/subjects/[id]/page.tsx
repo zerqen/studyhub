@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -19,6 +19,8 @@ export default async function SubjectPage({
     where: { id, userId: user.id },
     select: {
       id: true,
+      selfStudy: true,
+      tracks: { where: { archived: false }, select: { id: true, name: true, emoji: true, color: true, _count: { select: { lectures: true } } } },
       name: true,
       emoji: true,
       color: true,
@@ -54,6 +56,10 @@ export default async function SubjectPage({
       },
       notes: { orderBy: { updatedAt: "desc" }, select: { id: true, title: true, content: true, color: true, updatedAt: true } },
       attachments: { where: { lectureId: null }, orderBy: { createdAt: "desc" }, select: { id: true, originalName: true, mimeType: true, size: true } },
+      interactives: {
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, title: true, description: true, updatedAt: true, lecture: { select: { title: true, number: true } } },
+      },
       lectures: {
         orderBy: [{ number: "asc" }, { date: "asc" }],
         select: {
@@ -68,12 +74,16 @@ export default async function SubjectPage({
     },
   });
   if (!subject) notFound();
+  // Направление саморазвития живёт в разделе «Изучаю»
+  if (subject.selfStudy) redirect(`/learn/${subject.id}`);
 
   const data: SubjectData = {
     ...subject,
     examDate: subject.examDate ? format(subject.examDate, "yyyy-MM-dd") : "",
     tasks: subject.tasks.map((t) => ({ ...t, dueDate: t.dueDate ? t.dueDate.toISOString() : null })),
     notes: subject.notes.map((n) => ({ ...n, updatedAt: n.updatedAt.toISOString() })),
+    tracks: subject.tracks.map((t) => ({ id: t.id, name: t.name, emoji: t.emoji, color: t.color, topics: t._count.lectures })),
+    interactives: subject.interactives.map((i) => ({ ...i, updatedAt: i.updatedAt.toISOString() })),
     questions: subject.questions.map((q) => ({ ...q, srsDue: q.srsDue ? q.srsDue.toISOString() : null })),
     lectures: subject.lectures.map((l) => ({
       id: l.id,

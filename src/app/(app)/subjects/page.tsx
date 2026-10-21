@@ -16,7 +16,7 @@ export default async function SubjectsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const archived = sp.archived === "1";
   const subjects = await prisma.subject.findMany({
-    where: { userId: user.id, archived },
+    where: { userId: user.id, archived, selfStudy: false },
     select: {
       id: true,
       name: true,

@@ -20,18 +20,6 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Введите пароль"),
 });
 
-export const forgotSchema = z.object({
-  email: z.string().trim().email("Некорректный email"),
-});
-
-export const resetSchema = z
-  .object({
-    token: z.string().min(10),
-    password: z.string().min(8, "Минимум 8 символов").max(100),
-    confirm: z.string(),
-  })
-  .refine((d) => d.password === d.confirm, { path: ["confirm"], message: "Пароли не совпадают" });
-
 export const profileSchema = z.object({
   name: z.string().trim().min(2).max(80),
 });

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { authOptions } from "@/lib/auth";
+import { activeUserId } from "@/lib/session";
 import { ALLOWED_MIME, MAX_DIRECT_FILE_SIZE } from "@/lib/constants";
 import { assertParentOwned, parentFrom } from "@/lib/upload-parent";
 import { blobAccess } from "@/lib/files";
@@ -30,15 +29,15 @@ export async function POST(request: Request) {
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const session = await getServerSession(authOptions);
-        if (!session?.user?.id) throw new Error("Нужно войти");
+        const userId = await activeUserId();
+        if (!userId) throw new Error("Нужно войти");
         const payload = clientPayload ? (JSON.parse(clientPayload) as Record<string, unknown>) : {};
-        await assertParentOwned(session.user.id, parentFrom((k) => payload[k]));
+        await assertParentOwned(userId, parentFrom((k) => payload[k]));
         return {
           allowedContentTypes: [...ALLOWED_MIME],
           maximumSizeInBytes: MAX_DIRECT_FILE_SIZE,
           addRandomSuffix: true,
-          tokenPayload: JSON.stringify({ userId: session.user.id }),
+          tokenPayload: JSON.stringify({ userId: userId }),
         };
       },
       // Запись в базу делает /api/upload/register — так работает и без вебхуков

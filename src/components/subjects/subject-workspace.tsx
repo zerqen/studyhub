@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, Image as ImageIcon, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, Image as ImageIcon, MonitorPlay, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
 import { archiveSubject, deleteSubject } from "@/actions/subjects";
 import { reorderQuestions } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, SUBJECT_TYPES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
@@ -26,6 +26,8 @@ import { LectureForm } from "../lectures/lecture-form";
 import { QuestionGenerator } from "../ai/question-generator";
 import { useAiEnabled } from "../ai/use-ai";
 import { Segmented } from "../ui/page";
+import { InteractiveCards, type InteractiveCard } from "../interactive/interactive-cards";
+import { InteractiveForm } from "../interactive/interactive-form";
 
 export type SubjectData = {
   id: string;
@@ -41,12 +43,16 @@ export type SubjectData = {
   tasks: { id: string; title: string; status: string; priority: string; dueDate: string | null }[];
   notes: { id: string; title: string; content: string; color: string; updatedAt: string }[];
   attachments: { id: string; originalName: string; mimeType: string; size: number }[];
+  interactives: InteractiveCard[];
+  /** Направления «Изучаю», связанные с предметом */
+  tracks: { id: string; name: string; emoji: string; color: string; topics: number }[];
   lectures: { id: string; number: number | null; title: string; date: string | null; questions: number; photos: number; media: number }[];
 };
 
 const tabs = [
   ["questions", "Вопросы"],
   ["lectures", "Лекции"],
+  ["interactives", "Интерактивы"],
   ["study", "Тренировка"],
   ["tasks", "Задачи"],
   ["notes", "Заметки"],
@@ -69,7 +75,7 @@ export function SubjectWorkspace({
   taskProgress?: number;
 }) {
   const [tab, setTabState] = useState<Tab>(tabs.some(([id]) => id === initialTab) ? (initialTab as Tab) : "questions");
-  const [open, setOpen] = useState<null | "edit" | "question" | "import" | "task" | "note" | "lecture">(null);
+  const [open, setOpen] = useState<null | "edit" | "question" | "import" | "task" | "note" | "lecture" | "interactive">(null);
   // Порядок вопросов можно менять перетаскиванием — держим его локально
   const [order, setOrder] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -120,6 +126,7 @@ export function SubjectWorkspace({
   const counts: Record<Tab, number | null> = {
     questions: subject.questions.length,
     lectures: subject.lectures.length,
+    interactives: subject.interactives.length,
     study: null,
     tasks: subject.tasks.length,
     notes: subject.notes.length,
@@ -319,6 +326,18 @@ export function SubjectWorkspace({
 
       {tab === "lectures" && (
         <section>
+          {subject.tracks.length ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted">Доп. темы:</span>
+              {subject.tracks.map((t) => (
+                <Link key={t.id} href={`/learn/${t.id}`} className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs transition-colors hover:border-fg/20 hover:bg-subtle">
+                  <span>{t.emoji}</span>
+                  <span className="font-medium">{t.name}</span>
+                  <span className="text-muted">{t.topics}</span>
+                </Link>
+              ))}
+            </div>
+          ) : null}
           <div className="mb-4 flex justify-end">
             <Button onClick={() => setOpen("lecture")}>
               <Plus className="h-4 w-4" /> Лекция
@@ -364,6 +383,30 @@ export function SubjectWorkspace({
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+      )}
+
+      {tab === "interactives" && (
+        <section>
+          <div className="mb-4 flex justify-end">
+            <Button onClick={() => setOpen("interactive")}>
+              <Plus className="h-4 w-4" /> Схема
+            </Button>
+          </div>
+          {subject.interactives.length === 0 ? (
+            <EmptyState
+              icon={MonitorPlay}
+              title="Интерактивов нет"
+              hint="Симуляции и схемы в HTML запускаются прямо на сайте. Привязать к лекции можно на её странице."
+              action={
+                <Button onClick={() => setOpen("interactive")}>
+                  <Plus className="h-4 w-4" /> Добавить схему
+                </Button>
+              }
+            />
+          ) : (
+            <InteractiveCards items={subject.interactives} />
           )}
         </section>
       )}
@@ -491,6 +534,9 @@ export function SubjectWorkspace({
       </Modal>
       <Modal open={open === "question"} onClose={() => setOpen(null)} title="Новый вопрос">
         <QuestionForm subjectId={subject.id} lectures={subject.lectures} onDone={() => setOpen(null)} />
+      </Modal>
+      <Modal open={open === "interactive"} onClose={() => setOpen(null)} title="Новая схема" description="HTML запускается изолированно: у него нет доступа к твоему аккаунту">
+        <InteractiveForm subjectId={subject.id} onDone={(id) => router.push(`/interactives/${id}`)} />
       </Modal>
       <Modal open={open === "lecture"} onClose={() => setOpen(null)} title="Новая лекция">
         <LectureForm subjectId={subject.id} onDone={() => setOpen(null)} />

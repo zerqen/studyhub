@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       take: 12,
       select: { id: true, title: true, body: true, href: true, read: true, createdAt: true },
     }),
-    prisma.subject.findMany({ where: { userId: user.id, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.subject.findMany({ where: { userId: user.id, archived: false, selfStudy: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   // Пересчёт дедлайнов и уведомлений — уже ПОСЛЕ отправки страницы, не задерживает её
   after(() => refreshDeadlineNotifications(user.id).catch(() => undefined));

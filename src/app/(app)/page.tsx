@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, BookOpen, Brain, CalendarClock, CheckCircle2, GraduationCap, Pin } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getDashboard } from "@/lib/queries";
-import { daysUntil, formatDate } from "@/lib/utils";
+import { daysUntil, formatDate, formatRelative } from "@/lib/utils";
 import { ProgressBar } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { QuickCreate } from "@/components/dashboard/quick-create";
@@ -171,6 +171,34 @@ export default async function DashboardPage() {
               </ul>
             )}
           </Section>
+
+          {data.recentTopics.length ? (
+            <Section
+              title="Изучаю"
+              action={
+                <Link href="/learn" className="text-xs font-medium text-muted hover:text-fg">
+                  Все
+                </Link>
+              }
+              bodyClassName="p-1.5"
+            >
+              <ul>
+                {data.recentTopics.map((t) => (
+                  <li key={t.id}>
+                    <Link href={`/lectures/${t.id}`} className="flex gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
+                      <span className="text-base leading-6">{t.subject.emoji}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{t.title}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {t.subject.name} · {formatRelative(t.updatedAt)}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          ) : null}
 
           {data.notes.length ? (
             <Section

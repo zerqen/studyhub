@@ -14,7 +14,7 @@ export default async function CalendarPage() {
   const [data, events, subjects, sync] = await Promise.all([
     getCalendarData(user.id, from, to),
     getScheduleEvents(user.id, from, to),
-    prisma.subject.findMany({ where: { userId: user.id, archived: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.subject.findMany({ where: { userId: user.id, archived: false, selfStudy: false }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.user.findUnique({ where: { id: user.id }, select: { scheduleUrl: true, scheduleSyncedAt: true } }),
   ]);
   return (

@@ -42,11 +42,6 @@ function LoginForm() {
       <Button type="submit" className="w-full" size="lg" loading={busy}>
         Войти
       </Button>
-      <div className="text-center">
-        <Link className="text-sm text-muted hover:text-fg" href="/forgot-password">
-          Забыли пароль?
-        </Link>
-      </div>
     </form>
   );
 }

@@ -1,19 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { registerAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { AuthCard } from "@/components/auth/auth-card";
+import { Clock } from "lucide-react";
 
 export default function RegisterPage() {
   const [v, setV] = useState({ name: "", email: "", password: "", confirm: "" });
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
+  const [sent, setSent] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,15 +24,33 @@ export default function RegisterPage() {
       setBusy(false);
       return;
     }
-    await signIn("credentials", { email: v.email, password: v.password, redirect: false });
-    router.replace("/");
-    router.refresh();
+    setSent(true);
+  }
+
+  if (sent) {
+    return (
+      <AuthCard
+        title="Заявка отправлена"
+        footer={
+          <Link className="font-medium text-accent hover:underline" href="/login">
+            Ко входу
+          </Link>
+        }
+      >
+        <div className="flex gap-3 text-sm">
+          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+          <p className="text-muted">
+            Аккаунт <span className="font-medium text-fg">{v.email}</span> создан и ждёт подтверждения. Войти получится, когда доступ откроют.
+          </p>
+        </div>
+      </AuthCard>
+    );
   }
 
   return (
     <AuthCard
       title="Регистрация"
-      hint="Создай аккаунт и добавь первый предмет."
+      hint="Доступ к сайту открывается после подтверждения."
       footer={
         <p>
           Уже есть аккаунт?{" "}
