@@ -29,6 +29,7 @@ import { ScheduleImport } from "./schedule-import";
 import { expandEvents, kindMeta, weekParity } from "@/lib/schedule";
 import { isAssignedAt, isDueAt } from "@/lib/homework";
 import { HomeworkPanel } from "./homework-panel";
+import { taskKind } from "@/lib/task-kinds";
 import { Segmented } from "../ui/page";
 import { useToast } from "../ui/toast";
 
@@ -128,7 +129,7 @@ export function CalendarApp({
       add(due, {
         kind: "task",
         id: t.id,
-        title: t.kind === "HOMEWORK" ? `ДЗ: ${t.title}` : t.title,
+        title: t.kind && t.kind !== "TASK" ? `${taskKind(t.kind).label}: ${t.title}` : t.title,
         color: t.subject?.color ?? "#94a3b8",
         href: `/tasks/${t.id}`,
         done: t.status === "DONE",

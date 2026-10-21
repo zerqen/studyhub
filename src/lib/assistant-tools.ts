@@ -6,6 +6,7 @@ import { dayKey } from "./utils";
 import { dueFields, nextLesson } from "./homework";
 import { dueDay, dueText, isDate, isTime, matchByName, msk, pad, shortDay, timeOf } from "./assistant-utils";
 import type { ToolSpec } from "./groq";
+import { KIND_STAGES, TASK_KIND_VALUES, taskKind, type TaskKind } from "./task-kinds";
 
 /**
  * Инструменты ассистента. Читающие выполняются сразу; изменяющие только готовят «предложение»,
@@ -70,12 +71,13 @@ export const TOOLS: ToolSpec[] = [
                 title: str,
                 description: str,
                 subject: str,
-                homework: { type: "boolean", description: "Это домашнее задание с пары" },
+                type: { type: "string", enum: ["HOMEWORK", "LAB", "TEST", "DRAWING", "TASK"], description: "HOMEWORK — ДЗ, LAB — лабораторная, TEST — контрольная, DRAWING — чертёж, TASK — другое" },
+                homework: { type: "boolean", description: "Это домашнее задание с пары (то же, что type=HOMEWORK)" },
                 due_next_lesson: { type: "boolean", description: "Срок — следующая пара этого предмета (для домашки)" },
                 due_date: date,
                 due_time: time,
                 priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
-                stages: { type: "array", items: str, description: "Подзадачи по порядку, если нужны" },
+                stages: { type: "array", items: str, description: "Этапы по порядку. Не передавай — для LAB/TEST/DRAWING подставится стандартный шаблон" },
               },
               required: ["title"],
             },
@@ -230,7 +232,7 @@ export async function runReadTool(userId: string, subjects: Subject[], name: str
         subject: t.subject?.name,
         due: dueText(t.dueDate, t.dueTime),
         overdue: t.dueDate! < today || undefined,
-        homework: t.kind === "HOMEWORK" || undefined,
+        type: t.kind && t.kind !== "TASK" ? taskKind(t.kind).full : undefined,
         priority: t.priority === "HIGH" || t.priority === "CRITICAL" ? t.priority : undefined,
         status: t.status === "IN_PROGRESS" ? "в процессе" : undefined,
       })),
@@ -282,7 +284,7 @@ export async function runReadTool(userId: string, subjects: Subject[], name: str
       examDate: s.examDate ? `${shortDay(s.examDate)} ${timeOf(s.examDate)}` : null,
       teacher: s.teacher,
       questions: { total, learned: count("LEARNED"), inProgress: count("IN_PROGRESS"), needReview: count("REVIEW"), notStarted: count("UNLEARNED"), dueForReviewNow: due },
-      openTasks: tasks.map((t) => ({ id: t.id, title: short(t.title), due: dueText(t.dueDate, t.dueTime), homework: t.kind === "HOMEWORK" || undefined })),
+      openTasks: tasks.map((t) => ({ id: t.id, title: short(t.title), due: dueText(t.dueDate, t.dueTime), type: t.kind && t.kind !== "TASK" ? taskKind(t.kind).full : undefined })),
       lectures,
       mockExams: exams.map((e) => ({ grade: e.grade, date: shortDay(e.startedAt) })),
     };
@@ -341,7 +343,8 @@ export async function buildProposal(userId: string, subjects: Subject[], name: s
       const title = txt(t.title, 200);
       if (!title) throw new ToolError("У задачи нет названия");
       const subject = resolve(subjects, t.subject);
-      const homework = Boolean(t.homework);
+      const type = (TASK_KIND_VALUES as readonly string[]).includes(String(t.type)) ? (String(t.type) as TaskKind) : t.homework ? "HOMEWORK" : "TASK";
+      const homework = type === "HOMEWORK";
       let dueDate: string | null = null;
       let dueTime: string | null = isTime(t.due_time) ? pad(t.due_time) : null;
       let lessonAt: string | null = null;
@@ -366,10 +369,11 @@ export async function buildProposal(userId: string, subjects: Subject[], name: s
       }
       if (isDate(t.due_date)) dueDate = dueDay(t.due_date).toISOString();
       const priority = PRIORITIES.includes(String(t.priority)) ? String(t.priority) : "MEDIUM";
-      const stages = arr(t.stages as unknown).map((x) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 10);
-      drafts.push({ title, description: txt(t.description, 4000) || null, subjectId: subject?.id ?? null, kind: homework ? "HOMEWORK" : "TASK", lessonAt, dueDate, dueTime, priority, stages });
+      const given = arr(t.stages as unknown).map((x) => String(x).trim().slice(0, 200)).filter(Boolean).slice(0, 10);
+      const stages = given.length ? given : (KIND_STAGES[type] ?? []);
+      drafts.push({ title, description: txt(t.description, 4000) || null, subjectId: subject?.id ?? null, kind: type, lessonAt, dueDate, dueTime, priority, stages });
       items.push({
-        label: `${homework ? "ДЗ · " : ""}${subject ? `${subject.name} — ` : ""}${title}`,
+        label: `${type !== "TASK" ? `${taskKind(type).label} · ` : ""}${subject ? `${subject.name} — ` : ""}${title}`,
         detail: [`срок: ${dueText(dueDate, dueTime)}${note}`, priority !== "MEDIUM" ? `приоритет ${priority.toLowerCase()}` : "", stages.length ? `этапы: ${stages.join(" → ")}` : ""].filter(Boolean).join(" · "),
       });
     }

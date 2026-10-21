@@ -10,6 +10,7 @@ import { Section } from "@/components/ui/page";
 import { ActivityHeatmap } from "@/components/dashboard/activity";
 import { TodayLessons } from "@/components/dashboard/today-lessons";
 import { kindMeta } from "@/lib/schedule";
+import { taskKind } from "@/lib/task-kinds";
 
 function greeting() {
   const h = Number(new Intl.DateTimeFormat("ru-RU", { hour: "numeric", timeZone: "Europe/Moscow" }).format(new Date()));
@@ -283,7 +284,7 @@ function TaskRow({
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: task.subject?.color ?? "rgb(var(--muted))" }} />
         )}
         <span className="min-w-0 flex-1 truncate text-sm">
-          {task.kind === "HOMEWORK" ? <span className="mr-1.5 rounded bg-accent/10 px-1 text-[10px] font-semibold text-accent">ДЗ</span> : null}
+          {task.kind && task.kind !== "TASK" ? <span className={`mr-1.5 rounded px-1 text-[10px] font-semibold ${taskKind(task.kind).className}`}>{taskKind(task.kind).label}</span> : null}
           {task.title}
         </span>
         {task.subject ? <span className="hidden truncate text-xs text-muted sm:block sm:max-w-[10rem]">{task.subject.name}</span> : null}

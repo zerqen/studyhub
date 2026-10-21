@@ -71,8 +71,18 @@ export const taskSchema = z.object({
   status: z.enum(["PLANNED", "IN_PROGRESS", "DONE", "OVERDUE", "CANCELLED"]),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
   questionId: z.string().optional().nullable(),
-  // Готовые этапы-подзадачи (например, для лабораторной)
-  stages: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+  // ДЗ, лаба, КР, чертёж, другое
+  kind: z.enum(["TASK", "HOMEWORK", "LAB", "TEST", "DRAWING"]).optional(),
+  // Этапы-подзадачи (шаблон по типу), даты — по желанию
+  stages: z
+    .array(
+      z.union([
+        z.string().trim().min(1).max(200),
+        z.object({ title: z.string().trim().min(1).max(200), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal("")) }),
+      ]),
+    )
+    .max(20)
+    .optional(),
 });
 
 export const subtaskSchema = z.object({

@@ -18,6 +18,7 @@ import { FileUploader } from "../files/uploader";
 import { FileGrid } from "../files/file-grid";
 import { CommentThread } from "../comments/comment-thread";
 import { Markdown } from "../ui/markdown";
+import { taskKind } from "@/lib/task-kinds";
 
 type FileItem = { id: string; originalName: string; mimeType: string; size: number };
 
@@ -149,12 +150,15 @@ export function TaskDetail({
                   <Badge tone={priorityTone(task.priority)}>{labelOf(TASK_PRIORITIES, task.priority)}</Badge>
                 </dd>
               </div>
-              {task.kind === "HOMEWORK" ? (
+              {task.kind && task.kind !== "TASK" ? (
                 <div className="flex items-center justify-between gap-2">
                   <dt className="flex items-center gap-2 text-muted">
-                    <BookMarked className="h-4 w-4" /> Домашка
+                    <BookMarked className="h-4 w-4" /> Тип
                   </dt>
-                  <dd className="text-right text-sm">{task.lessonAt ? `задали ${formatDate(task.lessonAt, "d MMM, HH:mm")}` : "да"}</dd>
+                  <dd className="text-right text-sm">
+                    {taskKind(task.kind).full}
+                    {task.kind === "HOMEWORK" && task.lessonAt ? ` · задали ${formatDate(task.lessonAt, "d MMM, HH:mm")}` : ""}
+                  </dd>
                 </div>
               ) : null}
             </dl>
@@ -219,6 +223,7 @@ export function TaskDetail({
             dueTime: task.dueTime ?? "",
             priority: task.priority,
             status: st,
+            kind: task.kind ?? "TASK",
             tags: task.tags.map((item) => item.tag.name).join(", "),
             questionId: task.questions[0]?.id,
           }}

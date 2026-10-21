@@ -60,13 +60,13 @@ export function SubjectWorkspace({
   initialTab,
   progress,
   qProgress,
-  taskProgress,
 }: {
   subject: SubjectData;
   initialTab: string;
   progress: number;
   qProgress: number;
-  taskProgress: number;
+  /** Больше не показывается отдельно — оставлено для совместимости вызова */
+  taskProgress?: number;
 }) {
   const [tab, setTabState] = useState<Tab>(tabs.some(([id]) => id === initialTab) ? (initialTab as Tab) : "questions");
   const [open, setOpen] = useState<null | "edit" | "question" | "import" | "task" | "note" | "lecture">(null);
@@ -457,22 +457,17 @@ export function SubjectWorkspace({
           <div className="card space-y-4 p-5">
             <div>
               <div className="mb-1.5 flex justify-between text-sm">
-                <span className="text-muted">Вопросы</span>
-                <span className="font-medium tabular-nums">{qProgress}%</span>
+                <span className="text-muted">Готовность — выучено вопросов</span>
+                <span className="font-semibold tabular-nums">{qProgress}%</span>
               </div>
               <ProgressBar value={qProgress} color={subject.color} />
             </div>
-            <div>
-              <div className="mb-1.5 flex justify-between text-sm">
-                <span className="text-muted">Задачи</span>
-                <span className="font-medium tabular-nums">{taskProgress}%</span>
-              </div>
-              <ProgressBar value={taskProgress} color={subject.color} />
-            </div>
             <div className="border-t border-line pt-3">
               <div className="flex justify-between text-sm">
-                <span className="text-muted">Общая готовность</span>
-                <span className="font-semibold tabular-nums">{progress}%</span>
+                <span className="text-muted">Задач закрыто</span>
+                <span className="tabular-nums text-muted">
+                  {subject.tasks.filter((t) => t.status === "DONE").length} из {subject.tasks.length}
+                </span>
               </div>
             </div>
           </div>

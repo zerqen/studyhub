@@ -31,13 +31,7 @@ export function subtaskProgress(
   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
 }
 
-export function subjectProgress(input: {
-  questions: Countable[];
-  tasks: Countable[];
-}) {
-  const parts: number[] = [];
-  if (input.questions.length) parts.push(learnedShare(input.questions));
-  if (input.tasks.length) parts.push(taskShare(input.tasks));
-  if (!parts.length) return 0;
-  return Math.round(parts.reduce((a, b) => a + b, 0) / parts.length);
+/** Готовность к предмету — только по выученным вопросам. Задачи на неё не влияют. */
+export function subjectProgress(input: { questions: Countable[]; tasks?: Countable[] }) {
+  return learnedShare(input.questions);
 }

@@ -7,9 +7,9 @@ describe("progress", () => {
     expect(ratio(1, 3)).toBe(33);
   });
 
-  it("subjectProgress — среднее по вопросам и задачам", () => {
-    expect(subjectProgress({ questions: [{ status: "LEARNED" }, { status: "REVIEW" }], tasks: [{ status: "DONE" }] })).toBe(75);
-    expect(subjectProgress({ questions: [], tasks: [] })).toBe(0);
+  it("subjectProgress — только выученные вопросы, задачи не влияют", () => {
+    expect(subjectProgress({ questions: [{ status: "LEARNED" }, { status: "REVIEW" }], tasks: [{ status: "DONE" }] })).toBe(50);
+    expect(subjectProgress({ questions: [], tasks: [{ status: "DONE" }] })).toBe(0);
   });
 
   it("subtaskProgress учитывает вложенность", () => {

@@ -28,7 +28,15 @@ export async function createTask(input: unknown): Promise<ActionResult<{ id: str
         userId,
         tags: { create: tagRows.map((t) => ({ tagId: t.id })) },
         ...(stages?.length
-          ? { subtasks: { create: stages.map((title: string, i: number) => ({ userId, title, sortOrder: i + 1 })) } }
+          ? {
+              subtasks: {
+                create: stages.map((s: string | { title: string; dueDate?: string | null }, i: number) =>
+                  typeof s === "string"
+                    ? { userId, title: s, sortOrder: i + 1 }
+                    : { userId, title: s.title, sortOrder: i + 1, dueDate: s.dueDate ? new Date(`${s.dueDate}T00:00:00.000Z`) : null },
+                ),
+              },
+            }
           : {}),
       },
     });
