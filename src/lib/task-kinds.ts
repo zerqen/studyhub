@@ -1,11 +1,11 @@
 /** Типы задач и шаблоны этапов. Даты этапов пользователь ставит сам. */
 
 export const TASK_KINDS = [
-  { value: "HOMEWORK", label: "ДЗ", full: "Домашка", className: "bg-accent/10 text-accent" },
-  { value: "LAB", label: "Лаба", full: "Лабораторная", className: "bg-[#14b8a6]/15 text-[#0f8f7f] dark:text-[#2dd4bf]" },
-  { value: "TEST", label: "КР", full: "Контрольная", className: "bg-warning/15 text-warning" },
-  { value: "DRAWING", label: "Чертёж", full: "Чертёж", className: "bg-[#a855f7]/12 text-[#9333ea] dark:text-[#c084fc]" },
-  { value: "TASK", label: "Другое", full: "Другое", className: "bg-subtle text-muted" },
+  { value: "HOMEWORK", label: "ДЗ", full: "Домашка" },
+  { value: "LAB", label: "Лаба", full: "Лабораторная" },
+  { value: "TEST", label: "КР", full: "Контрольная" },
+  { value: "DRAWING", label: "Чертёж", full: "Чертёж" },
+  { value: "TASK", label: "Другое", full: "Другое" },
 ] as const;
 
 export type TaskKind = (typeof TASK_KINDS)[number]["value"];

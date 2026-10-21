@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea } from "../ui/field";
 import { useToast } from "../ui/toast";
 import { KIND_STAGES, TASK_KINDS, type TaskKind } from "@/lib/task-kinds";
+import { KIND_ICONS } from "./kind-chip";
 
 type Stage = { title: string; dueDate: string };
 
@@ -92,9 +93,13 @@ export function TaskForm({
             }}
             className={cn(
               "h-8 rounded-full border px-3 text-[13px] font-medium transition-colors",
-              v.kind === k.value ? cn("border-transparent", k.className) : "border-line text-muted hover:text-fg",
+              v.kind === k.value ? "border-fg/20 bg-fg text-bg" : "border-line text-muted hover:text-fg",
             )}
           >
+            {(() => {
+              const Icon = KIND_ICONS[k.value];
+              return Icon ? <Icon className="mr-1 inline h-3.5 w-3.5 align-[-2px]" /> : null;
+            })()}
             {k.full}
           </button>
         ))}

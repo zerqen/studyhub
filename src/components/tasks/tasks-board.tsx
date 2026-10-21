@@ -17,6 +17,7 @@ import { Select } from "../ui/field";
 import { useToast } from "../ui/toast";
 import { TaskForm } from "./task-form";
 import { Checkbox } from "./checkbox";
+import { KIND_ICONS, KindChip } from "./kind-chip";
 
 type Step = { id: string; title: string; status: string; dueDate: string | null; parentId: string | null };
 
@@ -59,11 +60,6 @@ const addDaysKey = (key: string, n: number) => {
 };
 const closed = (s: string) => s === "DONE" || s === "CANCELLED";
 
-function KindChip({ kind }: { kind?: string }) {
-  if (!kind || kind === "TASK") return null;
-  const k = taskKind(kind);
-  return <span className={cn("mr-1.5 inline-block rounded px-1 py-px align-[1px] text-[10px] font-semibold leading-tight", k.className)}>{k.label}</span>;
-}
 
 export function TasksBoard({
   tasks,
@@ -192,6 +188,7 @@ export function TasksBoard({
   };
 
   const isCurrentWeek = week.keys.includes(todayKey);
+  const weekEmpty = [...week.days.values()].every((l) => l.length === 0);
   const empty = view === "week" ? week.overdue.length + week.noDate.length + [...week.days.values()].reduce((a, l) => a + l.length, 0) === 0 : false;
 
   return (
@@ -232,8 +229,15 @@ export function TasksBoard({
                     return n;
                   })
                 }
-                className={cn("h-8 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors", on ? cn("border-transparent", k.className) : "border-line text-muted hover:text-fg")}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors",
+                  on ? "border-fg/20 bg-fg text-bg" : "border-line text-muted hover:text-fg",
+                )}
               >
+                {(() => {
+                  const Icon = KIND_ICONS[k.value];
+                  return Icon ? <Icon className="h-3.5 w-3.5" /> : null;
+                })()}
                 {k.label}
               </button>
             );
@@ -306,8 +310,11 @@ export function TasksBoard({
               {week.overdue.length ? (
                 <DayBlock title="Просрочено" tone="danger" entries={week.overdue} {...rowProps} showDates />
               ) : null}
+              {weekEmpty ? <p className="card px-4 py-6 text-center text-sm text-muted">На этой неделе сдач и этапов нет</p> : null}
               {week.keys.map((key) => {
                 const entries = week.days.get(key) ?? [];
+                // Пустые дни не показываем
+                if (!entries.length) return null;
                 const d = fromKey(key);
                 const past = key < todayKey;
                 const n = openCount(entries);
@@ -444,7 +451,6 @@ function StepRow({ step, task, onToggleStep, showDate, danger }: { step: Step; t
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
           <span className="inline-flex items-center gap-1">
             <ArrowRight className="h-3 w-3" />
-            <KindChip kind={task.kind} />
             {task.title}
           </span>
           {task.subject ? <span>· {task.subject.name}</span> : null}
@@ -525,12 +531,10 @@ function TaskRow({
         <Checkbox checked={done} onChange={() => onToggle(task)} className="mt-0.5" label={done ? "Вернуть в работу" : "Выполнить"} />
         <div className="min-w-0 flex-1">
           <Link href={`/tasks/${task.id}`} className="block">
-            <div className={cn("text-sm leading-snug", done && "text-muted line-through", (danger || overdue) && !done && "text-danger")}>
-              <KindChip kind={task.kind} />
-              {task.title}
-            </div>
+            <div className={cn("text-sm leading-snug", done && "text-muted line-through", (danger || overdue) && !done && "text-danger")}>{task.title}</div>
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            <KindChip kind={task.kind} />
             {task.subject ? (
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full" style={{ background: task.subject.color }} />
@@ -752,7 +756,7 @@ function QuickAdd({ subjects }: { subjects: { id: string; name: string }[] }) {
       </div>
       {parsed ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5 px-1 text-xs text-muted">
-          {k && k.value !== "TASK" ? <span className={cn("rounded px-1.5 py-0.5 font-semibold", k.className)}>{k.full}</span> : null}
+          {k && k.value !== "TASK" ? <KindChip kind={k.value} /> : null}
           <span className="font-medium text-fg">{parsed.title}</span>
           {parsed.subjectName ? <span>· {parsed.subjectName}</span> : <span className="text-muted/70">· без предмета</span>}
           {parsed.dueDate ? (
