@@ -5,6 +5,7 @@ import { questionImportSchema, questionSchema } from "@/lib/validations";
 import { refreshAll, withUser, type ActionResult } from "@/lib/action";
 import { syncTags } from "@/lib/tags";
 import { applyGrade } from "@/lib/grade";
+import { removeUpload } from "@/lib/files";
 
 export async function createQuestion(input: unknown): Promise<ActionResult<{ id: string }>> {
   return withUser(async (userId) => {
@@ -99,11 +100,34 @@ export async function updateQuestion(id: string, input: unknown): Promise<Action
   });
 }
 
+/** Удаляет вопросы вместе с их файлами (и файлами комментариев) из хранилища */
+async function removeQuestions(userId: string, ids: string[]) {
+  const unique = [...new Set(ids)].slice(0, 2000);
+  if (!unique.length) return 0;
+  const files = await prisma.attachment.findMany({
+    where: { userId, OR: [{ questionId: { in: unique } }, { comment: { questionId: { in: unique } } }] },
+    select: { storagePath: true },
+  });
+  const res = await prisma.question.deleteMany({ where: { userId, id: { in: unique } } });
+  await Promise.allSettled(files.map((f) => removeUpload(f.storagePath)));
+  return res.count;
+}
+
 export async function deleteQuestion(id: string): Promise<ActionResult> {
   return withUser(async (userId) => {
-    const res = await prisma.question.deleteMany({ where: { id, userId } });
-    if (!res.count) throw new Error("Вопрос не найден");
+    if (!(await removeQuestions(userId, [id]))) throw new Error("Вопрос не найден");
     refreshAll();
+  });
+}
+
+/** Удаление нескольких вопросов сразу (выбор в списке предмета) */
+export async function deleteQuestions(ids: string[]): Promise<ActionResult<{ count: number }>> {
+  return withUser(async (userId) => {
+    if (!Array.isArray(ids) || ids.some((x) => typeof x !== "string")) throw new Error("Некорректные данные");
+    const count = await removeQuestions(userId, ids);
+    if (!count) throw new Error("Вопросы не найдены");
+    refreshAll();
+    return { count };
   });
 }
 

@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Eye, EyeOff, ListPlus, Pencil, Plus } from "lucide-react";
-import { recordAttempt } from "@/actions/questions";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, Eye, EyeOff, ListPlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { deleteQuestion, recordAttempt } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
 import { cn, formatDate, formatRelative } from "@/lib/utils";
 import { GRADES, isDue, previewLabel, type Grade } from "@/lib/srs";
 import { Markdown } from "../ui/markdown";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { Modal } from "../ui/modal";
+import { ConfirmDialog, Modal } from "../ui/modal";
 import { Section } from "../ui/page";
 import { useToast } from "../ui/toast";
 import { QuestionForm } from "./question-form";
@@ -51,7 +52,10 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
   const [editing, setEditing] = useState(false);
   const [creatingTask, setCreatingTask] = useState(false);
   const [pending, setPending] = useState<Grade | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+  const router = useRouter();
+  const backHref = `/subjects/${question.subjectId}?tab=questions`;
   const attempts = question.attempts ?? [];
   const knewCount = attempts.filter((a) => a.knew).length;
 
@@ -67,7 +71,7 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link href={`/subjects/${question.subjectId}?tab=questions`} className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
+      <Link href={backHref} className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition-colors hover:text-fg">
         <ChevronLeft className="h-4 w-4" /> {question.subject.emoji} {question.subject.name}
       </Link>
 
@@ -87,6 +91,9 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
                 ))}
                 <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setEditing(true)}>
                   <Pencil className="h-3.5 w-3.5" /> Изменить
+                </Button>
+                <Button variant="ghost" size="icon-sm" className="hover:text-danger" onClick={() => setDeleting(true)} aria-label="Удалить вопрос" title="Удалить вопрос">
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
               <div className="text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
@@ -249,6 +256,18 @@ export function QuestionDetail({ question }: { question: QuestionDetailData }) {
           onDone={() => setCreatingTask(false)}
         />
       </Modal>
+      <ConfirmDialog
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title="Удалить вопрос?"
+        text="Вопрос удалится вместе с ответом, комментариями, файлами и историей повторений."
+        onConfirm={async () => {
+          const r = await deleteQuestion(question.id);
+          if (!r.ok) return toast.push(r.error, "err");
+          toast.push("Вопрос удалён");
+          router.replace(backHref);
+        }}
+      />
     </div>
   );
 }

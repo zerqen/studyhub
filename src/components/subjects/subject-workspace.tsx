@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, Image as ImageIcon, MonitorPlay, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, ListChecks, Image as ImageIcon, MonitorPlay, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
 import { archiveSubject, deleteSubject } from "@/actions/subjects";
-import { reorderQuestions } from "@/actions/questions";
+import { deleteQuestions, reorderQuestions } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, SUBJECT_TYPES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
 import { cn, daysUntil, formatDate, isOverdue } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -82,6 +82,10 @@ export function SubjectWorkspace({
   const [menu, setMenu] = useState(false);
   const [del, setDel] = useState(false);
   const [qFilter, setQFilter] = useState<string>("all");
+  // Выбор вопросов для удаления
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDel, setBulkDel] = useState(false);
   const [importMode, setImportMode] = useState<"ai" | "json">("ai");
   const ai = useAiEnabled();
   const router = useRouter();
@@ -106,7 +110,33 @@ export function SubjectWorkspace({
   }, [order, subject.questions]);
   const numberOf = useMemo(() => new Map(ordered.map((q, i) => [q.id, i + 1])), [ordered]);
   const shownQuestions = useMemo(() => (qFilter === "all" ? ordered : ordered.filter((q) => q.status === qFilter)), [qFilter, ordered]);
-  const canDrag = qFilter === "all" && ordered.length > 1;
+  const canDrag = qFilter === "all" && ordered.length > 1 && !selecting;
+  const allShownSelected = shownQuestions.length > 0 && shownQuestions.every((q) => selected.has(q.id));
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  async function removeSelected() {
+    const ids = [...selected];
+    const r = await deleteQuestions(ids);
+    if (!r.ok) return toast.push(r.error, "err");
+    toast.push(`Удалено вопросов: ${r.data?.count ?? ids.length}`);
+    setOrder((o) => (o ? o.filter((id) => !selected.has(id)) : o));
+    setBulkDel(false);
+    stopSelecting();
+    router.refresh();
+  }
 
   function moveOver(targetId: string) {
     if (!dragId || dragId === targetId) return;
@@ -246,6 +276,11 @@ export function SubjectWorkspace({
                 </button>
               ))}
             </div>
+            {subject.questions.length ? (
+              <Button variant="secondary" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}>
+                <ListChecks className="h-4 w-4" /> {selecting ? "Готово" : "Выбрать"}
+              </Button>
+            ) : null}
             <Button variant="secondary" onClick={() => setOpen("import")}>
               <FileJson className="h-4 w-4" /> Импорт
             </Button>
@@ -253,6 +288,35 @@ export function SubjectWorkspace({
               <Plus className="h-4 w-4" /> Вопрос
             </Button>
           </div>
+          {selecting ? (
+            <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 shadow-card">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[rgb(var(--accent))]"
+                  checked={allShownSelected}
+                  onChange={() =>
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      for (const q of shownQuestions) {
+                        if (allShownSelected) next.delete(q.id);
+                        else next.add(q.id);
+                      }
+                      return next;
+                    })
+                  }
+                />
+                {qFilter === "all" ? "Все" : "Все с этим статусом"}
+              </label>
+              <span className="text-sm text-muted">выбрано {selected.size}</span>
+              <Button size="sm" variant="danger" className="ml-auto" disabled={!selected.size} onClick={() => setBulkDel(true)}>
+                <Trash2 className="h-3.5 w-3.5" /> Удалить
+              </Button>
+              <Button size="sm" variant="ghost" onClick={stopSelecting}>
+                Отмена
+              </Button>
+            </div>
+          ) : null}
           {subject.questions.length === 0 ? (
             <EmptyState
               title="Вопросов пока нет"
@@ -296,7 +360,26 @@ export function SubjectWorkspace({
                     {canDrag ? (
                       <GripVertical className="absolute left-1 top-3.5 hidden h-4 w-4 cursor-grab text-muted/60 opacity-0 transition-opacity group-hover/row:opacity-100 sm:block" />
                     ) : null}
-                    <Link href={`/questions/${q.id}`} draggable={false} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-subtle/60">
+                    <Link
+                      href={`/questions/${q.id}`}
+                      draggable={false}
+                      onClick={(e) => {
+                        if (!selecting) return;
+                        e.preventDefault();
+                        toggleSelected(q.id);
+                      }}
+                      className={cn("group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-subtle/60", selecting && selected.has(q.id) && "bg-accent/5")}
+                    >
+                      {selecting ? (
+                        <input
+                          type="checkbox"
+                          readOnly
+                          tabIndex={-1}
+                          checked={selected.has(q.id)}
+                          className="pointer-events-none mt-0.5 h-4 w-4 shrink-0 accent-[rgb(var(--accent))]"
+                          aria-label="Выбрать вопрос"
+                        />
+                      ) : null}
                       <span className="mt-0.5 w-6 shrink-0 text-right text-xs tabular-nums text-muted">{numberOf.get(q.id)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="line-clamp-2 text-sm leading-snug">
@@ -535,6 +618,13 @@ export function SubjectWorkspace({
       <Modal open={open === "question"} onClose={() => setOpen(null)} title="Новый вопрос">
         <QuestionForm subjectId={subject.id} lectures={subject.lectures} onDone={() => setOpen(null)} />
       </Modal>
+      <ConfirmDialog
+        open={bulkDel}
+        onClose={() => setBulkDel(false)}
+        title={`Удалить ${selected.size} ${selected.size % 10 === 1 && selected.size % 100 !== 11 ? "вопрос" : selected.size % 10 >= 2 && selected.size % 10 <= 4 && (selected.size % 100 < 12 || selected.size % 100 > 14) ? "вопроса" : "вопросов"}?`}
+        text="Вместе с ответами, комментариями, файлами и историей повторений. Отменить нельзя."
+        onConfirm={removeSelected}
+      />
       <Modal open={open === "interactive"} onClose={() => setOpen(null)} title="Новая схема" description="HTML запускается изолированно: у него нет доступа к твоему аккаунту">
         <InteractiveForm subjectId={subject.id} onDone={(id) => router.push(`/interactives/${id}`)} />
       </Modal>
