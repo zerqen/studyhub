@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Loader2, Paperclip, UploadCloud } from "lucide-react";
+import { compressImage, inBatches } from "@/lib/compress-image";
 import { DIRECT_UPLOAD_THRESHOLD, MAX_DIRECT_FILE_SIZE, guessMime, maxServerSize } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useToast } from "../ui/toast";
@@ -33,7 +34,8 @@ function canUploadDirect() {
 }
 
 /** Обычные файлы — через сервер; большие (записи лекций) — напрямую в Vercel Blob */
-export async function uploadFile(file: File, parent: UploadParent | undefined, onProgress?: (pct: number) => void) {
+export async function uploadFile(original: File, parent: UploadParent | undefined, onProgress?: (pct: number) => void) {
+  const file = await compressImage(original);
   const mimeType = guessMime(file.name, file.type);
   const direct = !parent?.avatar && file.size > DIRECT_UPLOAD_THRESHOLD ? await canUploadDirect() : null;
   if (direct?.enabled) {
@@ -109,7 +111,7 @@ export function FileUploader({
     setBusy(true);
     setProgress(null);
     try {
-      await Promise.all(list.map((file) => uploadFile(file, parent, list.length === 1 ? setProgress : undefined)));
+      await inBatches(list, 3, (file) => uploadFile(file, parent, list.length === 1 ? setProgress : undefined));
       toast.push(list.length === 1 ? "Файл загружен" : `Загружено файлов: ${list.length}`);
       router.refresh();
     } catch (e) {

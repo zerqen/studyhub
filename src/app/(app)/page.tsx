@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BookOpen, Brain, CalendarClock, CheckCircle2, GraduationCap, Pin } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpen, Brain, CalendarClock, CheckCircle2, GraduationCap, Pin, Timer } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getDashboard } from "@/lib/queries";
 import { daysUntil, formatDate, formatRelative } from "@/lib/utils";
@@ -156,14 +156,17 @@ export default async function DashboardPage() {
                 {data.exams.map((s) => {
                   const d = daysUntil(s.examDate);
                   return (
-                    <li key={s.id}>
-                      <Link href={`/subjects/${s.id}`} className="flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
+                    <li key={s.id} className="flex items-center gap-1">
+                      <Link href={`/subjects/${s.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
                         <span className="text-lg">{s.emoji}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium">{s.name}</span>
                           <span className="block text-xs text-muted">{formatDate(s.examDate, "d MMMM")}</span>
                         </span>
                         <span className={`text-xs font-medium ${d !== null && d <= 3 ? "text-danger" : "text-muted"}`}>{examLabel(d)}</span>
+                      </Link>
+                      <Link href={`/subjects/${s.id}/ten`} className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-medium text-accent transition-colors hover:bg-accent/10" title="10 минут: самые слабые вопросы по этому экзамену">
+                        <Timer className="h-4 w-4" /> 10 мин
                       </Link>
                     </li>
                   );

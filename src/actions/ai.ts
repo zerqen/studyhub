@@ -1,9 +1,10 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { withUser, type ActionResult } from "@/lib/action";
+import { refreshAll, withUser, type ActionResult } from "@/lib/action";
 import { aiEnabled, groqChat, groqVision, GroqLimitError } from "@/lib/groq";
-import { checkPrompt, OCR_PROMPT, questionsPrompt } from "@/lib/ai-prompts";
+import { checkPrompt, keyPartsPrompt, OCR_PROMPT, questionsPrompt } from "@/lib/ai-prompts";
+import { hasMarkedParts, onlyBoldAdded } from "@/lib/definitions";
 import { normalizeFeedback, normalizeQuestions, parseModelJson, type AnswerFeedback, type GeneratedQuestion } from "@/lib/ai-parse";
 import { toParagraphs, upsertBlock, type Segment } from "@/lib/transcript";
 import { aiQuota } from "@/lib/ai-quota";
@@ -74,6 +75,28 @@ export async function checkAnswer(questionId: string, answer: string): Promise<A
       { json: true, maxTokens: 1200, temperature: 0.1 },
     );
     return normalizeFeedback(parseModelJson(raw));
+  });
+}
+
+/** Выделяет в ответе ключевые части для режима «Определения». Текст ответа не меняется — это проверяется. */
+export async function markKeyParts(questionId: string): Promise<AiResult<string>> {
+  return ai(async (userId) => {
+    const q = await prisma.question.findFirst({
+      where: { id: questionId, userId },
+      select: { text: true, answer: true, subject: { select: { name: true } } },
+    });
+    if (!q) throw new Error("Вопрос не найден");
+    if (!q.answer?.trim()) throw new Error("У вопроса нет ответа");
+    if (hasMarkedParts(q.answer)) return q.answer;
+    const { text: raw } = await groqChat(
+      [{ role: "user", content: keyPartsPrompt({ subject: q.subject.name, question: q.text, answer: q.answer }) }],
+      { maxTokens: 3000, temperature: 0.1 },
+    );
+    const marked = raw.trim().replace(/^```(?:markdown|md)?\s*/i, "").replace(/\s*```$/, "");
+    if (!hasMarkedParts(marked) || !onlyBoldAdded(q.answer, marked)) throw new Error("ИИ изменил текст ответа — разметка не сохранена");
+    await prisma.question.update({ where: { id: questionId }, data: { answer: marked } });
+    refreshAll();
+    return marked;
   });
 }
 

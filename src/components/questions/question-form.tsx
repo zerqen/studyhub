@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Bold } from "lucide-react";
 import { DIFFICULTIES, QUESTION_STATUSES } from "@/lib/constants";
 import { createQuestion, updateQuestion } from "@/actions/questions";
 import { Button } from "../ui/button";
@@ -39,6 +40,22 @@ export function QuestionForm({
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+
+  /** Выделение ключевых частей для режима «Определения»: кнопка или Ctrl+B */
+  function toggleBold() {
+    const el = answerRef.current;
+    if (!el || el.selectionStart === el.selectionEnd) return;
+    const { selectionStart: from, selectionEnd: to, value } = el;
+    const picked = value.slice(from, to);
+    const isBold = picked.startsWith("**") && picked.endsWith("**") && picked.length > 4;
+    const next = isBold ? picked.slice(2, -2) : `**${picked.trim()}**`;
+    setV((prev) => ({ ...prev, answer: value.slice(0, from) + next + value.slice(to) }));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(from, from + next.length);
+    });
+  }
 
   async function submit(e: React.FormEvent, keepOpen = false) {
     e.preventDefault();
@@ -70,9 +87,30 @@ export function QuestionForm({
       <Field label={v.kind === "PROBLEM" ? "Условие задачи" : "Вопрос"} error={err}>
         <Textarea rows={2} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} required autoFocus placeholder={v.kind === "PROBLEM" ? "Например: найдите предел…" : "Сформулируй, как в билете"} />
       </Field>
-      <Field label={v.kind === "PROBLEM" ? "Решение" : "Ответ"} hint="Поддерживается Markdown и формулы: $x^2$, $$\int f(x)\,dx$$">
-        <Textarea rows={5} value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} placeholder="Можно заполнить позже" />
-      </Field>
+      <div className="space-y-1.5">
+        <Field
+          label={v.kind === "PROBLEM" ? "Решение" : "Ответ"}
+          hint={v.kind === "PROBLEM" ? "Поддерживается Markdown и формулы: $x^2$, $$\\int f(x)\\,dx$$" : "Формулы: $x^2$, $$\\int f(x)\\,dx$$. Жирным выделяй то, что нельзя упустить: это скрывается в режиме «Определения»"}
+        >
+          <Textarea
+            ref={answerRef}
+            rows={5}
+            value={v.answer}
+            onChange={(e) => setV({ ...v, answer: e.target.value })}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+                e.preventDefault();
+                toggleBold();
+              }
+            }}
+            placeholder="Можно заполнить позже"
+          />
+        </Field>
+        {/* onMouseDown: кнопка не должна забирать фокус и сбрасывать выделение в поле */}
+        <Button type="button" variant="secondary" size="sm" onMouseDown={(e) => e.preventDefault()} onClick={toggleBold} title="Выделить выбранный текст (Ctrl+B)">
+          <Bold className="h-3.5 w-3.5" /> Жирным
+        </Button>
+      </div>
       <Field label="Пояснение">
         <Textarea rows={2} value={v.explanation} onChange={(e) => setV({ ...v, explanation: e.target.value })} placeholder="Подсказка, пример, источник" />
       </Field>

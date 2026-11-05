@@ -4,12 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BookOpen, Brain, CalendarDays, CheckSquare, Compass, FolderOpen, Home, Menu, MonitorPlay, NotebookPen, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { cn, initials } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 import { SearchBox } from "./search-box";
 import { NotificationBell } from "./notification-bell";
 import { Hotkeys } from "./hotkeys";
-import { Assistant } from "../assistant/assistant";
+
+// Чат с его Markdown и формулами нужен не на каждой странице: подгружается отдельно, после открытия сайта
+const Assistant = dynamic(() => import("../assistant/assistant").then((m) => m.Assistant), { ssr: false });
 
 const nav = [
   { href: "/", label: "Главная", icon: Home },

@@ -1,5 +1,7 @@
 /* StudyHub service worker: офлайн-заглушка, кэш статики и push-уведомления. Данные всегда берутся из сети. */
-const VERSION = "v2";
+const VERSION = "v3";
+// Старые файлы сборки не копятся на телефоне бесконечно
+const MAX_ENTRIES = 300;
 const STATIC = `studyhub-static-${VERSION}`;
 const OFFLINE = "/offline.html";
 
@@ -28,7 +30,14 @@ self.addEventListener("fetch", (event) => {
         const hit = await cache.match(req);
         if (hit) return hit;
         const res = await fetch(req);
-        if (res.ok) cache.put(req, res.clone());
+        if (res.ok) {
+          await cache.put(req, res.clone());
+          const keys = await cache.keys();
+          for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ENTRIES))) {
+            const path = new URL(key.url).pathname;
+            if (path !== OFFLINE && path !== "/icons/icon-192.png") await cache.delete(key);
+          }
+        }
         return res;
       }),
     );

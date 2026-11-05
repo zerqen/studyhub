@@ -17,6 +17,7 @@ const studySelect = {
   srsEase: true,
   srsReps: true,
   srsLapses: true,
+  kind: true,
   ticket: { select: { title: true } },
   lecture: { select: { title: true, number: true } },
   subject: { select: { id: true, name: true, emoji: true, color: true } },

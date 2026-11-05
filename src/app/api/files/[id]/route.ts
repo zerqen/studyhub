@@ -10,14 +10,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const userId = await activeUserId();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
   const { id } = await ctx.params;
-  const file = await prisma.attachment.findFirst({ where: { id, userId } });
+  const file = await prisma.attachment.findFirst({ where: { id, userId }, select: { storagePath: true, originalName: true, mimeType: true } });
   if (!file) return new NextResponse("Not found", { status: 404 });
   const download = new URL(req.url).searchParams.get("download") === "1";
   const disposition = `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`;
 
   // Публичный Blob: просмотр — прямо с CDN (быстрее, и аудио/видео перематывается через Range-запросы)
   if (isRemoteStoragePath(file.storagePath) && !isPrivateBlob(file.storagePath) && !download) {
-    return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=300" } });
+    return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=86400" } });
   }
 
   const stored = await openStored(file.storagePath);
@@ -33,7 +33,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       "X-Content-Type-Options": "nosniff",
       // SVG/HTML/XML могут содержать скрипты: открываем их в «песочнице» без доступа к сайту и входу
       ...(ACTIVE_TYPES.test(file.mimeType) ? { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'" } : {}),
-      "Cache-Control": "private, max-age=3600",
+      // Содержимое файла с этим id не меняется: повторно картинки берутся из кэша, без запроса к базе
+      "Cache-Control": "private, max-age=604800, immutable",
       ...(stored.size ? { "Content-Length": String(stored.size) } : {}),
     },
   });

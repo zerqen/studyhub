@@ -14,6 +14,8 @@ import { useToast } from "../ui/toast";
 import { Pomodoro } from "./pomodoro";
 import { AnswerCheck } from "../ai/answer-check";
 import { useAiEnabled } from "../ai/use-ai";
+import { DefinitionDrill } from "./definition-drill";
+import { gradeStyle } from "./grade-style";
 
 export type StudyQuestion = {
   id: string;
@@ -66,16 +68,9 @@ function shuffled<T>(items: T[]) {
   return a;
 }
 
-const gradeStyle: Record<Grade, string> = {
-  0: "text-danger hover:bg-danger/10",
-  1: "text-warning hover:bg-warning/10",
-  2: "text-success hover:bg-success/10",
-  3: "text-accent hover:bg-accent/10",
-};
-
-export function StudyMode({ questions, color, showSubject }: { questions: StudyQuestion[]; color?: string; showSubject?: boolean }) {
-  const [view, setView] = useState<"cards" | "list">("cards");
-  const [filter, setFilter] = useState<Filter>(() => (pick(questions, "due").length ? "due" : "all"));
+export function StudyMode({ questions, color, showSubject, fixed }: { questions: StudyQuestion[]; color?: string; showSubject?: boolean; /** Готовая колода («10 минут»): без фильтров и помодоро */ fixed?: boolean }) {
+  const [view, setView] = useState<"cards" | "defs" | "list">("cards");
+  const [filter, setFilter] = useState<Filter>(() => (!fixed && pick(questions, "due").length ? "due" : "all"));
   const [random, setRandom] = useState(false);
   // Колода фиксируется на время сессии — оценки не «перемешивают» её на ходу
   const [deck, setDeck] = useState<StudyQuestion[]>(() => pick(questions, filter));
@@ -162,16 +157,18 @@ export function StudyMode({ questions, color, showSubject }: { questions: StudyQ
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Segmented
-          value={filter}
-          options={filters.map(([id, label]) => [id, id === "due" && counts.due ? `${label} · ${counts.due}` : id === "new" && counts.new ? `${label} · ${counts.new}` : label] as const)}
-          onChange={(f) => {
-            setFilter(f);
-            restart(f);
-          }}
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <Pomodoro />
+        {fixed ? null : (
+          <Segmented
+            value={filter}
+            options={filters.map(([id, label]) => [id, id === "due" && counts.due ? `${label} · ${counts.due}` : id === "new" && counts.new ? `${label} · ${counts.new}` : label] as const)}
+            onChange={(f) => {
+              setFilter(f);
+              restart(f);
+            }}
+          />
+        )}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {fixed ? null : <Pomodoro />}
           {view === "cards" ? (
             <Button
               variant={random ? "primary" : "secondary"}
@@ -190,6 +187,7 @@ export function StudyMode({ questions, color, showSubject }: { questions: StudyQ
             value={view}
             options={[
               ["cards", "Карточки"],
+              ["defs", "Определения"],
               ["list", "Шпаргалка"],
             ]}
             onChange={setView}
@@ -197,7 +195,9 @@ export function StudyMode({ questions, color, showSubject }: { questions: StudyQ
         </div>
       </div>
 
-      {view === "list" ? (
+      {view === "defs" ? (
+        <DefinitionDrill key={filter} pool={listItems} all={questions} color={color} showSubject={showSubject} />
+      ) : view === "list" ? (
         <div className="space-y-2">
           {listItems.length === 0 ? <p className="card p-6 text-center text-sm text-muted">Нет вопросов по этому фильтру</p> : null}
           {listItems.map((q, i) => (

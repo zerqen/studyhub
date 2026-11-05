@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, ListChecks, Image as ImageIcon, MonitorPlay, MoreHorizontal, Pencil, Play, Plus, Printer, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, FileJson, GraduationCap, GripVertical, Headphones, ListChecks, Image as ImageIcon, MonitorPlay, MoreHorizontal, Pencil, Play, Plus, Printer, Sigma, Timer, Trash2 } from "lucide-react";
 import { archiveSubject, deleteSubject } from "@/actions/subjects";
 import { deleteQuestions, reorderQuestions } from "@/actions/questions";
 import { DIFFICULTIES, QUESTION_STATUSES, SUBJECT_TYPES, TASK_STATUSES, labelOf, questionStatusTone, taskStatusTone } from "@/lib/constants";
@@ -507,6 +507,22 @@ export function SubjectWorkspace({
             </span>
             <ArrowUpRight className="h-4 w-4 shrink-0 text-muted" />
           </Link>
+          <div className="mx-auto mb-4 grid max-w-3xl gap-3 sm:grid-cols-2">
+            <Link href={`/subjects/${subject.id}/ten`} className="card card-hover flex items-center gap-3 px-4 py-3">
+              <Timer className="h-5 w-5 shrink-0 text-accent" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">10 минут</span>
+                <span className="block text-xs text-muted">Самые слабые вопросы к экзамену</span>
+              </span>
+            </Link>
+            <Link href={`/subjects/${subject.id}/formulas`} className="card card-hover flex items-center gap-3 px-4 py-3">
+              <Sigma className="h-5 w-5 shrink-0 text-accent" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Лист формул</span>
+                <span className="block text-xs text-muted">Все формулы предмета на одной странице</span>
+              </span>
+            </Link>
+          </div>
           <StudyMode questions={ordered} color={subject.color} />
         </>
       )}
