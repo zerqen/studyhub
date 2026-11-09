@@ -1,0 +1,195 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Указатели по шагам</title><style>:root{color-scheme:light;--bg:#f7f7f9;--surface:#fff;--subtle:#f0f0f4;--line:#dfe0e6;--fg:#1c1e26;--muted:#646b7a;--accent:#5b5bd6;--acct:#e9e9fb;--ok:#14745a;--okt:#dcf3ec;--bad:#b3341f;--badt:#fbe5e0;--warn:#975a05;--warnt:#fbeed8;--inp:#c2700a}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14151a;--surface:#1c1e25;--subtle:#262932;--line:#343845;--fg:#ececf1;--muted:#a0a6b4;--accent:#8080e6;--acct:#2e2e58;--ok:#55cfa9;--okt:#163a30;--bad:#f28e7b;--badt:#472019;--warn:#e7b566;--warnt:#43321a;--inp:#c78426}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:21px;line-height:1.2;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+nav.tabs{display:flex;gap:4px;margin:0 0 12px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{flex:none;border:1px solid transparent;background:none;color:var(--muted);padding:7px 9px;border-radius:7px;font:500 13.5px Inter,system-ui,sans-serif;cursor:pointer;min-height:38px}
+nav.tabs button[aria-selected=true]{background:var(--surface);color:var(--fg);border-color:var(--line)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card[hidden]{display:none}
+h2{font-size:16px;margin:0 0 3px}
+.hint{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+code,.mono,pre{font-family:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace}
+code{font-size:.92em;background:var(--subtle);padding:1px 4px;border-radius:4px}
+button.b,select{font:500 13.5px Inter,system-ui,sans-serif;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;min-height:38px;cursor:pointer;transition:background .15s,border-color .15s}
+button.b:hover{background:var(--subtle)}
+button.b.p{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){button.b.p{color:#14151a}}
+button.b.p:hover{filter:brightness(1.07);background:var(--accent)}
+button.b:disabled{opacity:.42;cursor:default}
+button.b[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mt{margin-top:12px}
+.bits{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}
+.bit{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;height:46px;font:600 17px ui-monospace,Menlo,Consolas,monospace;cursor:pointer;padding:0;transition:background .15s}
+.bit[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+.bit.static{cursor:default;height:32px;font-size:14px}
+.blab{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;text-align:center;color:var(--muted);font-size:11px;margin:0 0 3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px}
+.stat{background:var(--subtle);border-radius:7px;padding:7px 9px;min-width:0}
+.stat small{display:block;color:var(--muted);font-size:11.5px}
+.stat b{font:600 14px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.note{border-radius:7px;padding:9px 11px;font-size:14px;margin-top:10px;background:var(--subtle)}
+.note.ok{background:var(--okt);color:var(--ok)}.note.bad{background:var(--badt);color:var(--bad)}.note.warn{background:var(--warnt);color:var(--warn)}
+.note code{background:transparent;padding:0}
+.split{display:grid;gap:10px;grid-template-columns:1fr}
+@media (min-width:640px){.split{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}}
+.code{background:var(--subtle);border-radius:8px;padding:8px 0;font-size:13px;line-height:1.55;overflow-x:auto}
+.code div{padding:0 10px;white-space:pre;border-left:3px solid transparent;min-height:1.55em}
+.code div.on{background:var(--acct);border-left-color:var(--accent)}
+.k{color:#8a3aa0}.t{color:#0f7a78}.n{color:#b23a50}.c{color:var(--muted)}
+@media (prefers-color-scheme:dark){.k{color:#d7a0ea}.t{color:#6fd1cd}.n{color:#f0a0ae}}
+.mem{font-size:13px;display:grid;gap:3px}
+.cell{display:grid;grid-template-columns:92px minmax(58px,auto) minmax(0,1fr);gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--surface);transition:background .15s}
+.cell .a{color:var(--muted);font-size:12px}.cell .v{font-weight:600}.cell .m{color:var(--accent);font-size:12px;text-align:right;font-family:Inter,system-ui,sans-serif}
+.cell.ch{background:var(--acct);border-color:var(--accent)}
+.cell.tg{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.cell.off{opacity:.55;border-style:dashed}
+.frame{border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:5px}
+.frame>small{display:block;font-weight:600;font-size:12px;color:var(--muted);margin-bottom:4px}
+.frame.top{border-color:var(--accent)}
+.frame .cell{grid-template-columns:minmax(72px,auto) minmax(0,1fr)}
+.sp{font-size:12px;color:var(--warn);text-align:right;font-weight:500}
+.tape{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:2px}
+.by{height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--subtle);color:var(--muted);transition:background .15s}
+.by.e1{background:var(--line)}
+.by.hit{background:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.by.hit{color:#14151a}}
+.by.out{background:none;outline:1px dashed var(--line);outline-offset:-1px}
+.by.hit.out{background:var(--bad);color:#fff;outline:0}
+@media (prefers-color-scheme:dark){.by.hit.out{color:#14151a}}
+.by.pad{background:var(--badt);color:var(--bad)}
+.by.f{background:var(--acct);color:var(--fg);font-weight:600}
+.by.f.alt{background:var(--okt)}
+.flist{display:grid;gap:4px}
+.frow{display:flex;align-items:center;gap:4px;font:13.5px ui-monospace,Menlo,Consolas,monospace}
+.frow span{flex:1;min-width:0}
+.frow button{min-width:38px;padding:4px}
+.led{width:30px;height:30px;border-radius:50%;background:var(--subtle);border:1px solid var(--line);flex:none;transition:background .15s,box-shadow .15s}
+.led.on{background:#3d8bff;box-shadow:0 0 14px #3d8bff;border-color:#3d8bff}
+input[type=range]{width:100%;accent-color:var(--accent);height:30px}
+.num{font:600 15px ui-monospace,Menlo,Consolas,monospace;min-width:44px;text-align:right}
+.lg{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-bottom:2px}
+.lg i{display:inline-block;width:14px;height:2px;margin-right:5px;vertical-align:middle;border-radius:1px}
+svg text{font-family:Inter,system-ui,sans-serif}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.ring{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.slot{border:1px solid var(--line);border-radius:7px;padding:6px 4px;text-align:center;font:600 16px ui-monospace,Menlo,Consolas,monospace;transition:background .15s}
+.slot small{display:block;font:11px Inter,system-ui,sans-serif;color:var(--muted)}
+.slot.nx{border-color:var(--inp);box-shadow:inset 0 -3px 0 var(--inp)}
+.slot.nw{background:var(--acct);border-color:var(--accent)}
+.log{font-size:13px;background:#1c1e26;color:#eef0f2;border-radius:7px;padding:8px 10px;min-height:66px;white-space:pre-wrap;margin:8px 0 0}
+</style></head><body><main><h1>Указатели по шагам</h1><p class="sub">Интерактив к лекции 2. Указатели, массивы и ссылки</p></main><script>const $=(s,r=document)=>r.querySelector(s);
+function h(t,a,...k){const e=document.createElement(t);for(const x in a||{}){if(x==='on')for(const v in a.on)e.addEventListener(v,a.on[v]);else if(x==='cls')e.className=a[x];else if(x==='html')e.innerHTML=a[x];else if(a[x]!==false&&a[x]!=null)e.setAttribute(x,a[x])}for(const c of k.flat())if(c!=null)e.append(c);return e}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hl(line){
+  const i=line.indexOf('//');let code=i<0?line:line.slice(0,i),com=i<0?'':line.slice(i);
+  code=esc(code).replace(/\b(return|if|else|const|class|public|private|struct|for|while|static|volatile)\b/g,'<span class=k>$1</span>').replace(/\b(int|void|bool|uint8_t|uint16_t|uint32_t|uint64_t|double|float)\b/g,'<span class=t>$1</span>').replace(/\b(0x[0-9A-Fa-f]+|\d+)\b/g,'<span class=n>$1</span>');
+  return code+(com?'<span class=c>'+esc(com)+'</span>':'');
+}
+const hex=(v,w=8)=>'0x'+(v>>>0).toString(16).toUpperCase().padStart(w,'0');
+function tabs(list){
+  const nav=h('nav',{cls:'tabs',role:'tablist'}),box=h('div');
+  const items=list.map(([name,fn])=>{const card=h('section',{cls:'card',hidden:true});fn(card);box.append(card);
+    const b=h('button',{role:'tab','aria-selected':'false',on:{click:()=>pick(b,card)}},name);nav.append(b);return [b,card]});
+  function pick(b,c){items.forEach(([x,y])=>{x.setAttribute('aria-selected',x===b);y.hidden=y!==c});if(c.onshow)c.onshow()}
+  pick(...items[0]);$('main').append(nav,box);
+}
+function head(c,title,hint){c.append(h('h2',0,title),h('p',{cls:'hint',html:hint}))}
+function stepper(c,code,steps,render){
+  const pre=h('div',{cls:'code mono'}),view=h('div'),note=h('div',{cls:'note'}),count=h('span',{cls:'hint',style:'margin:0 0 0 auto'});
+  const lines=code.map(l=>{const d=h('div',{html:hl(l)||' '});pre.append(d);return d});
+  const prev=h('button',{cls:'b',on:{click:()=>go(i-1)}},'← Назад'),next=h('button',{cls:'b p',on:{click:()=>go(i+1)}},'Шаг →'),first=h('button',{cls:'b',on:{click:()=>go(0)}},'Сначала');
+  let i=0;
+  function go(n){i=Math.max(0,Math.min(steps.length-1,n));const s=steps[i];lines.forEach((d,k)=>d.classList.toggle('on',k===s.l));view.replaceChildren(...[render(s)].flat());note.innerHTML=s.t.replace(/`([^`]+)`/g,(m,x)=>'<code>'+esc(x)+'</code>');count.textContent=`шаг ${i+1} из ${steps.length}`;prev.disabled=i===0;next.disabled=i===steps.length-1}
+  c.append(h('div',{cls:'split'},pre,view),note,h('div',{cls:'row mt'},prev,next,first,count));go(0);
+  return {go};
+}
+
+// ===== логика (проверяется тестом) =====
+function elemAddr(base,size,n){return base+size*n}
+function ptrStatus(n,len){return n<len?'ok':n===len?'end':'ub'}
+const CONST_RULES={
+ 'int* p':{d:null,a:null},
+ 'const int* p':{d:"error: assignment of read-only location '* p'",a:null},
+ 'int* const p':{d:null,a:"error: assignment of read-only variable 'p'"},
+ 'const int* const p':{d:"error: assignment of read-only location '*(const int*)p'",a:"error: assignment of read-only variable 'p'"}
+};
+window.__t={elemAddr,ptrStatus,CONST_RULES};
+
+function ptrTab(c){
+  head(c,'Указатель по шагам','Следи за памятью. Значение указателя — обычное число, адрес ячейки. Адреса условные.');
+  const code=['int x = 10;','int* p = &x;','*p = 25;','int a[3] = {1, 2, 3};','p = a;','p = p + 1;','*p = 9;','p[1] = 7;','p = p + 1;     // теперь a[2]','p = p + 1;     // за концом массива'];
+  const B=0x20000000,AD={x:B,p:B+4,a0:B+8,a1:B+12,a2:B+16,a3:B+20};
+  const S=(x,p,a,t,l,ch)=>({x,p,a,t,l,ch});
+  const steps=[
+   S(10,null,null,'`x` занимает 4 байта, и в них записано 10.',0,'x'),
+   S(10,AD.x,null,'`&x` — адрес `x`. Он записан в `p`, и теперь `p` указывает на `x`.',1,'p'),
+   S(25,AD.x,null,'`*p` означает «ячейка по адресу из `p`». Запись через указатель изменила `x`.',2,'x'),
+   S(25,AD.x,[1,2,3],'Массив — три `int` подряд, шаг адреса 4 байта.',3,'a'),
+   S(25,AD.a0,[1,2,3],'Имя массива превратилось в адрес первого элемента. Указатель можно перенаправить.',4,'p'),
+   S(25,AD.a1,[1,2,3],'`p + 1` сдвигает на один элемент: адрес вырос на 4, а не на 1.',5,'p'),
+   S(25,AD.a1,[1,9,3],'Запись идёт в элемент, на который указывает `p`, то есть в `a[1]`.',6,'a1'),
+   S(25,AD.a1,[1,9,7],'`p[1]` это `*(p + 1)`: на элемент дальше текущего, то есть `a[2]`. Сам `p` не изменился.',7,'a2'),
+   S(25,AD.a2,[1,9,7],'`p` указывает на последний элемент массива.',8,'p'),
+   S(25,AD.a3,[1,9,7],'Адрес сразу за концом получить можно, а читать или писать по нему нельзя: это UB. Там могут лежать чужие данные.',9,'p')
+  ];
+  function row(addr,name,val,s,key,off){const tg=s.p===addr;return h('div',{cls:'cell mono'+(s.ch===key||(s.ch==='a'&&key.startsWith('a')&&!off)?' ch':'')+(tg?' tg':'')+(off?' off':'')},h('span',{cls:'a'},hex(addr)),h('span',{cls:'v'},val),h('span',{cls:'m'},name+(tg?' ← *p':'')))}
+  stepper(c,code,steps,s=>{const o=[row(AD.x,'x',String(s.x),s,'x'),row(AD.p,'p',s.p==null?'—':hex(s.p),s,'p')];
+    if(s.a){s.a.forEach((v,i)=>o.push(row(AD['a'+i],`a[${i}]`,String(v),s,'a'+i)));o.push(row(AD.a3,'за концом','?',s,'a3',true))}
+    return h('div',{cls:'mem'},o)});
+}
+
+function arithTab(c){
+  head(c,'Арифметика','Один и тот же <code>p + n</code> шагает на разное число байт. Массив из четырёх элементов, в одной клетке один байт.');
+  const types=[['uint8_t',1],['uint16_t',2],['uint32_t',4],['double',8]];let size=4,n=1;const LEN=4,B=0x20000000;
+  const tb=types.map(([t,s])=>{const e=h('button',{cls:'b mono',on:{click:()=>{size=s;draw()}}},t);e.dataset.s=s;return e});
+  const out=h('span',{cls:'num'}),minus=h('button',{cls:'b',on:{click:()=>{n=Math.max(0,n-1);draw()}},'aria-label':'уменьшить'},'−'),plus=h('button',{cls:'b',on:{click:()=>{n=Math.min(5,n+1);draw()}},'aria-label':'увеличить'},'+');
+  const tape=h('div',{cls:'tape mt'}),st=h('div',{cls:'stats mt'}),note=h('div',{cls:'note'});
+  function draw(){tb.forEach(e=>e.setAttribute('aria-pressed',+e.dataset.s===size));out.textContent=n;minus.disabled=n===0;plus.disabled=n===5;
+    const total=Math.max(8,Math.ceil((LEN+2)*size/8)*8);const cells=[];
+    for(let i=0;i<total;i++){const el=Math.floor(i/size),inside=el<LEN,hit=el===n;cells.push(h('div',{cls:'by'+(inside&&el%2?' e1':'')+(inside?'':' out')+(hit?' hit':'')},'+'+i))}
+    tape.replaceChildren(...cells);
+    const addr=elemAddr(B,size,n);st.replaceChildren(...[['sizeof(элемента)',size],['сдвиг, байт',n*size],['адрес p + '+n,hex(addr)]].map(([a,b])=>h('div',{cls:'stat'},h('small',0,a),h('b',0,String(b)))));
+    const f=ptrStatus(n,LEN);note.className='note '+(f==='ok'?'ok':f==='end'?'warn':'bad');
+    note.innerHTML=f==='ok'?`Законный элемент: <code>a[${n}]</code>.`:f==='end'?'Адрес сразу за концом: вычислять и сравнивать можно, разыменовывать нельзя.':'Дальше одного шага за конец массива уходить нельзя: уже само вычисление такого адреса является UB.'}
+  c.append(h('div',{cls:'row'},tb),h('div',{cls:'row mt'},h('code',0,'p + n'),h('span',{style:'margin-left:auto'}),minus,out,plus),tape,st,note);draw();
+}
+
+function constTab(c){
+  head(c,'const и указатели','Выбери объявление и попробуй две операции. Сообщения взяты у g++.');
+  const ds=Object.keys(CONST_RULES);let d=ds[1],last=null;
+  const db=ds.map(x=>{const e=h('button',{cls:'b mono',on:{click:()=>{d=x;last=null;draw()}}},x);e.dataset.x=x;return e});
+  const a1=h('button',{cls:'b mono',on:{click:()=>{last='d';draw()}}},'*p = 5;'),a2=h('button',{cls:'b mono',on:{click:()=>{last='a';draw()}}},'p = &y;');
+  const note=h('div',{cls:'note'}),decl=h('div',{cls:'code mono mt'});
+  function draw(){db.forEach(e=>e.setAttribute('aria-pressed',e.dataset.x===d));
+    decl.innerHTML='<div>'+hl('int x = 1, y = 2;')+'</div><div>'+hl(d+' = &x;')+'</div>';
+    if(!last){note.className='note';note.innerHTML='Нажми на операцию. Читай объявление справа налево: <code>const</code> относится к тому, что стоит рядом с ним.';return}
+    const err=CONST_RULES[d][last];note.className='note '+(err?'bad':'ok');note.innerHTML=err?'<code>'+esc(err)+'</code>':(last==='d'?'Компилируется: данные через этот указатель менять можно.':'Компилируется: сам указатель можно перенаправить.')}
+  c.append(h('div',{cls:'cols2'},db),decl,h('div',{cls:'row mt'},a1,a2),note);draw();
+}
+
+function gpioTab(c){
+  head(c,'Регистр GPIO','Модель регистра <code>GPIOC-&gt;ODR</code> по адресу <code>0x40020814</code>. Светодиод Black Pill на PC13 горит, когда на ножке 0.');
+  let odr=1<<13,n=13;const bs=[];const mk=(i)=>{const b=h('button',{cls:'bit','aria-label':'бит '+i,on:{click:()=>{n=i;draw()}}});bs[i]=b;return b};
+  const lab1=h('div',{cls:'blab'}),r1=h('div',{cls:'bits'}),lab2=h('div',{cls:'blab',style:'margin-top:6px'}),r2=h('div',{cls:'bits'});
+  for(let i=15;i>=8;i--){lab1.append(h('span',0,String(i)));r1.append(mk(i))}for(let i=7;i>=0;i--){lab2.append(h('span',0,String(i)));r2.append(mk(i))}
+  const led=h('div',{cls:'led'}),ledt=h('span',{cls:'hint',style:'margin:0'}),val=h('b',{class:'mono',style:'margin-left:auto'}),sel=h('code');
+  const apply=f=>{f();odr&=0xFFFF;draw()};
+  const ops=[['|=',()=>odr|=1<<n,'поставить'],['&= ~',()=>odr&=~(1<<n),'снять'],['^=',()=>odr^=1<<n,'инвертировать']];
+  const btns=ops.map(([o,f])=>{const e=h('button',{cls:'b mono',on:{click:()=>apply(f)}});e.dataset.o=o;return e});
+  const note=h('div',{cls:'note'});
+  function draw(){for(let i=0;i<16;i++){const on=!!(odr>>i&1);bs[i].textContent=on?1:0;bs[i].setAttribute('aria-pressed',on);bs[i].style.boxShadow=i===n?'inset 0 -3px 0 var(--inp)':''}
+    const lit=!(odr>>13&1);led.classList.toggle('on',lit);ledt.textContent=lit?'PC13 = 0, светодиод горит':'PC13 = 1, светодиод погашен';val.textContent=hex(odr,4);sel.textContent='выбран бит '+n;
+    btns.forEach(e=>e.textContent=`ODR ${e.dataset.o} (1u << ${n})`);
+    note.innerHTML='Нажми на бит, чтобы выбрать его, а затем примени операцию. Остальные биты при этом не меняются: иначе записью в один вывод можно сбить соседние.'}
+  c.append(lab1,r1,lab2,r2,h('div',{cls:'row mt'},led,ledt,val),h('div',{cls:'row mt'},sel),h('div',{cls:'row mt'},btns),note);draw();
+}
+tabs([['По шагам',ptrTab],['Арифметика',arithTab],['const',constTab],['Регистр',gpioTab]]);
+</script></body></html>

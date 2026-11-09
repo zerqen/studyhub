@@ -19,5 +19,6 @@ export const config = {
     "/exams/:path*",
     "/interactives/:path*",
     "/learn/:path*",
+    "/embedded/:path*",
   ],
 };

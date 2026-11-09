@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/", headers: securityHeaders },
       { source: "/:path((?!api/interactive/).*)", headers: securityHeaders },
+      // Файлы компилятора лежат в папке с номером версии и не меняются
+      { source: "/wasm/compiler/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];
   },
   serverExternalPackages: ["bcryptjs", "@prisma/client"],

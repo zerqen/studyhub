@@ -43,6 +43,7 @@ model User {
   examSessions      ExamSession[]
   pushSubscriptions PushSubscription[]
   interactives      Interactive[]
+  embeddedProgress  EmbeddedProgress[]
 
   @@index([email])
 }
@@ -488,6 +489,23 @@ model Interactive {
   @@index([userId, createdAt])
   @@index([subjectId])
   @@index([lectureId])
+}
+
+// Тренажёр Embedded: код и прогресс. Сами задания лежат в src/content/embedded
+model EmbeddedProgress {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskSlug   String
+  code       String
+  solved     Boolean   @default(false)
+  solvedAt   DateTime?
+  hintsShown Int       @default(0)
+  revealed   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([userId, taskSlug])
 }
 
 // Счётчики для ограничения частоты (вход, фоновые пересчёты) — общие для всех инстансов сервера

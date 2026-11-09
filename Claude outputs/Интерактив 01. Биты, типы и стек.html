@@ -1,0 +1,180 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Биты, типы и стек</title><style>:root{color-scheme:light;--bg:#f7f7f9;--surface:#fff;--subtle:#f0f0f4;--line:#dfe0e6;--fg:#1c1e26;--muted:#646b7a;--accent:#5b5bd6;--acct:#e9e9fb;--ok:#14745a;--okt:#dcf3ec;--bad:#b3341f;--badt:#fbe5e0;--warn:#975a05;--warnt:#fbeed8;--inp:#c2700a}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14151a;--surface:#1c1e25;--subtle:#262932;--line:#343845;--fg:#ececf1;--muted:#a0a6b4;--accent:#8080e6;--acct:#2e2e58;--ok:#55cfa9;--okt:#163a30;--bad:#f28e7b;--badt:#472019;--warn:#e7b566;--warnt:#43321a;--inp:#c78426}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:21px;line-height:1.2;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+nav.tabs{display:flex;gap:4px;margin:0 0 12px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{flex:none;border:1px solid transparent;background:none;color:var(--muted);padding:7px 9px;border-radius:7px;font:500 13.5px Inter,system-ui,sans-serif;cursor:pointer;min-height:38px}
+nav.tabs button[aria-selected=true]{background:var(--surface);color:var(--fg);border-color:var(--line)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card[hidden]{display:none}
+h2{font-size:16px;margin:0 0 3px}
+.hint{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+code,.mono,pre{font-family:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace}
+code{font-size:.92em;background:var(--subtle);padding:1px 4px;border-radius:4px}
+button.b,select{font:500 13.5px Inter,system-ui,sans-serif;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;min-height:38px;cursor:pointer;transition:background .15s,border-color .15s}
+button.b:hover{background:var(--subtle)}
+button.b.p{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){button.b.p{color:#14151a}}
+button.b.p:hover{filter:brightness(1.07);background:var(--accent)}
+button.b:disabled{opacity:.42;cursor:default}
+button.b[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mt{margin-top:12px}
+.bits{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}
+.bit{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;height:46px;font:600 17px ui-monospace,Menlo,Consolas,monospace;cursor:pointer;padding:0;transition:background .15s}
+.bit[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+.bit.static{cursor:default;height:32px;font-size:14px}
+.blab{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;text-align:center;color:var(--muted);font-size:11px;margin:0 0 3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px}
+.stat{background:var(--subtle);border-radius:7px;padding:7px 9px;min-width:0}
+.stat small{display:block;color:var(--muted);font-size:11.5px}
+.stat b{font:600 14px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.note{border-radius:7px;padding:9px 11px;font-size:14px;margin-top:10px;background:var(--subtle)}
+.note.ok{background:var(--okt);color:var(--ok)}.note.bad{background:var(--badt);color:var(--bad)}.note.warn{background:var(--warnt);color:var(--warn)}
+.note code{background:transparent;padding:0}
+.split{display:grid;gap:10px;grid-template-columns:1fr}
+@media (min-width:640px){.split{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}}
+.code{background:var(--subtle);border-radius:8px;padding:8px 0;font-size:13px;line-height:1.55;overflow-x:auto}
+.code div{padding:0 10px;white-space:pre;border-left:3px solid transparent;min-height:1.55em}
+.code div.on{background:var(--acct);border-left-color:var(--accent)}
+.k{color:#8a3aa0}.t{color:#0f7a78}.n{color:#b23a50}.c{color:var(--muted)}
+@media (prefers-color-scheme:dark){.k{color:#d7a0ea}.t{color:#6fd1cd}.n{color:#f0a0ae}}
+.mem{font-size:13px;display:grid;gap:3px}
+.cell{display:grid;grid-template-columns:92px minmax(58px,auto) minmax(0,1fr);gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--surface);transition:background .15s}
+.cell .a{color:var(--muted);font-size:12px}.cell .v{font-weight:600}.cell .m{color:var(--accent);font-size:12px;text-align:right;font-family:Inter,system-ui,sans-serif}
+.cell.ch{background:var(--acct);border-color:var(--accent)}
+.cell.tg{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.cell.off{opacity:.55;border-style:dashed}
+.frame{border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:5px}
+.frame>small{display:block;font-weight:600;font-size:12px;color:var(--muted);margin-bottom:4px}
+.frame.top{border-color:var(--accent)}
+.frame .cell{grid-template-columns:minmax(72px,auto) minmax(0,1fr)}
+.sp{font-size:12px;color:var(--warn);text-align:right;font-weight:500}
+.tape{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:2px}
+.by{height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--subtle);color:var(--muted);transition:background .15s}
+.by.e1{background:var(--line)}
+.by.hit{background:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.by.hit{color:#14151a}}
+.by.out{background:none;outline:1px dashed var(--line);outline-offset:-1px}
+.by.hit.out{background:var(--bad);color:#fff;outline:0}
+@media (prefers-color-scheme:dark){.by.hit.out{color:#14151a}}
+.by.pad{background:var(--badt);color:var(--bad)}
+.by.f{background:var(--acct);color:var(--fg);font-weight:600}
+.by.f.alt{background:var(--okt)}
+.flist{display:grid;gap:4px}
+.frow{display:flex;align-items:center;gap:4px;font:13.5px ui-monospace,Menlo,Consolas,monospace}
+.frow span{flex:1;min-width:0}
+.frow button{min-width:38px;padding:4px}
+.led{width:30px;height:30px;border-radius:50%;background:var(--subtle);border:1px solid var(--line);flex:none;transition:background .15s,box-shadow .15s}
+.led.on{background:#3d8bff;box-shadow:0 0 14px #3d8bff;border-color:#3d8bff}
+input[type=range]{width:100%;accent-color:var(--accent);height:30px}
+.num{font:600 15px ui-monospace,Menlo,Consolas,monospace;min-width:44px;text-align:right}
+.lg{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-bottom:2px}
+.lg i{display:inline-block;width:14px;height:2px;margin-right:5px;vertical-align:middle;border-radius:1px}
+svg text{font-family:Inter,system-ui,sans-serif}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.ring{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.slot{border:1px solid var(--line);border-radius:7px;padding:6px 4px;text-align:center;font:600 16px ui-monospace,Menlo,Consolas,monospace;transition:background .15s}
+.slot small{display:block;font:11px Inter,system-ui,sans-serif;color:var(--muted)}
+.slot.nx{border-color:var(--inp);box-shadow:inset 0 -3px 0 var(--inp)}
+.slot.nw{background:var(--acct);border-color:var(--accent)}
+.log{font-size:13px;background:#1c1e26;color:#eef0f2;border-radius:7px;padding:8px 10px;min-height:66px;white-space:pre-wrap;margin:8px 0 0}
+</style></head><body><main><h1>Биты, типы и стек</h1><p class="sub">Интерактив к лекции 1. Программа, типы и память</p></main><script>const $=(s,r=document)=>r.querySelector(s);
+function h(t,a,...k){const e=document.createElement(t);for(const x in a||{}){if(x==='on')for(const v in a.on)e.addEventListener(v,a.on[v]);else if(x==='cls')e.className=a[x];else if(x==='html')e.innerHTML=a[x];else if(a[x]!==false&&a[x]!=null)e.setAttribute(x,a[x])}for(const c of k.flat())if(c!=null)e.append(c);return e}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hl(line){
+  const i=line.indexOf('//');let code=i<0?line:line.slice(0,i),com=i<0?'':line.slice(i);
+  code=esc(code).replace(/\b(return|if|else|const|class|public|private|struct|for|while|static|volatile)\b/g,'<span class=k>$1</span>').replace(/\b(int|void|bool|uint8_t|uint16_t|uint32_t|uint64_t|double|float)\b/g,'<span class=t>$1</span>').replace(/\b(0x[0-9A-Fa-f]+|\d+)\b/g,'<span class=n>$1</span>');
+  return code+(com?'<span class=c>'+esc(com)+'</span>':'');
+}
+const hex=(v,w=8)=>'0x'+(v>>>0).toString(16).toUpperCase().padStart(w,'0');
+function tabs(list){
+  const nav=h('nav',{cls:'tabs',role:'tablist'}),box=h('div');
+  const items=list.map(([name,fn])=>{const card=h('section',{cls:'card',hidden:true});fn(card);box.append(card);
+    const b=h('button',{role:'tab','aria-selected':'false',on:{click:()=>pick(b,card)}},name);nav.append(b);return [b,card]});
+  function pick(b,c){items.forEach(([x,y])=>{x.setAttribute('aria-selected',x===b);y.hidden=y!==c});if(c.onshow)c.onshow()}
+  pick(...items[0]);$('main').append(nav,box);
+}
+function head(c,title,hint){c.append(h('h2',0,title),h('p',{cls:'hint',html:hint}))}
+function stepper(c,code,steps,render){
+  const pre=h('div',{cls:'code mono'}),view=h('div'),note=h('div',{cls:'note'}),count=h('span',{cls:'hint',style:'margin:0 0 0 auto'});
+  const lines=code.map(l=>{const d=h('div',{html:hl(l)||' '});pre.append(d);return d});
+  const prev=h('button',{cls:'b',on:{click:()=>go(i-1)}},'← Назад'),next=h('button',{cls:'b p',on:{click:()=>go(i+1)}},'Шаг →'),first=h('button',{cls:'b',on:{click:()=>go(0)}},'Сначала');
+  let i=0;
+  function go(n){i=Math.max(0,Math.min(steps.length-1,n));const s=steps[i];lines.forEach((d,k)=>d.classList.toggle('on',k===s.l));view.replaceChildren(...[render(s)].flat());note.innerHTML=s.t.replace(/`([^`]+)`/g,(m,x)=>'<code>'+esc(x)+'</code>');count.textContent=`шаг ${i+1} из ${steps.length}`;prev.disabled=i===0;next.disabled=i===steps.length-1}
+  c.append(h('div',{cls:'split'},pre,view),note,h('div',{cls:'row mt'},prev,next,first,count));go(0);
+  return {go};
+}
+
+// ===== логика (проверяется тестом) =====
+const toSigned8=v=>v>127?v-256:v;
+function promo(a,b,op){const r=op==='+'?a+b:op==='-'?a-b:a*b;return {int:r,u8:((r%256)+256)%256}}
+function bytesOf(v,n,big){const o=[];for(let i=0;i<n;i++)o.push(Math.floor(v/2**(8*i))%256);return big?o.reverse():o}
+window.__t={toSigned8,promo,bytesOf};
+
+function byteTab(c){
+  head(c,'Байт','Нажимай на биты. Одни и те же восемь бит читаются по-разному в зависимости от типа.');
+  let v=0xA5;const bs=[];const row=h('div',{cls:'bits'}),lab=h('div',{cls:'blab'});
+  for(let i=7;i>=0;i--){lab.append(h('span',0,String(2**i)));const b=h('button',{cls:'bit','aria-label':'бит '+i,on:{click:()=>{v^=1<<i;draw()}}});bs[i]=b;row.append(b)}
+  const st=h('div',{cls:'stats mt'}),note=h('div',{cls:'note'});
+  const ops=[['~v',()=>v=~v&255],['v << 1',()=>v=v<<1&255],['v >> 1',()=>v=v>>1],['v + 1',()=>v=v+1&255],['v − 1',()=>v=v-1&255],['0',()=>v=0]];
+  function draw(){for(let i=0;i<8;i++){const on=!!(v>>i&1);bs[i].textContent=on?1:0;bs[i].setAttribute('aria-pressed',on)}
+    const s=toSigned8(v);
+    st.replaceChildren(...[['hex','0x'+v.toString(16).toUpperCase().padStart(2,'0')],['uint8_t',v],['int8_t',s]].map(([a,b])=>h('div',{cls:'stat'},h('small',0,a),h('b',0,String(b)))));
+    note.innerHTML=v>127?'Старший бит равен 1. Для <code>uint8_t</code> это вес +128, а для <code>int8_t</code> вес −128, поэтому числа различаются на 256.':'Старший бит равен 0, поэтому оба типа читают одно и то же число.'}
+  c.append(lab,row,h('div',{cls:'row mt'},ops.map(([n,f])=>h('button',{cls:'b mono',on:{click:()=>{f();draw()}}},n))),st,note);draw();
+}
+
+function promoTab(c){
+  head(c,'Integer promotion','Два <code>uint8_t</code> сначала расширяются до <code>int</code>. Биты теряются только при записи обратно в байт.');
+  let a=200,b=100,op='+';
+  const num=(init,set)=>{const o=h('span',{cls:'num'},String(init));const r=h('input',{type:'range',min:0,max:255,value:init,'aria-label':'значение',on:{input:e=>{set(+e.target.value);o.textContent=e.target.value;draw()}}});return [r,o]};
+  const [ra,oa]=num(a,v=>a=v),[rb,ob]=num(b,v=>b=v);
+  const opb=['+','-','*'].map(x=>{const e=h('button',{cls:'b mono',on:{click:()=>{op=x;draw()}}},x==='-'?'−':x==='*'?'×':'+');e.dataset.o=x;return e});
+  const st=h('div',{cls:'stats mt'}),bitsBox=h('div',{cls:'mt'}),note=h('div',{cls:'note'});
+  const bitRow=(v,cut)=>{const d=h('div',{cls:'tape',style:'grid-template-columns:repeat(16,minmax(0,1fr))'});const u=((v%65536)+65536)%65536;for(let i=15;i>=0;i--){const on=u>>i&1;d.append(h('div',{cls:'by'+(i<8?' f':(cut&&on?' pad':'')),style:'height:26px;font-size:11px'},on?'1':'0'))}return d};
+  function draw(){opb.forEach(e=>e.setAttribute('aria-pressed',e.dataset.o===op));const r=promo(a,b,op);
+    st.replaceChildren(...[['int r = a '+(op==='-'?'−':op==='*'?'×':'+')+' b',r.int],['uint8_t x = a '+(op==='-'?'−':op==='*'?'×':'+')+' b',r.u8]].map(([t,v])=>h('div',{cls:'stat'},h('small',0,t),h('b',0,String(v)))));
+    bitsBox.replaceChildren(h('div',{cls:'hint',style:'margin:0 0 4px'},'Младшие 16 бит результата. В uint8_t попадают только правые 8:'),bitRow(r.int,true));
+    const lost=r.int!==r.u8;note.className='note '+(lost?'warn':'ok');
+    note.innerHTML=lost?(r.int<0?`В <code>int</code> результат равен ${r.int}. В байт он записывается по модулю 256: получается ${r.u8}.`:`В <code>int</code> всё точно: ${r.int}. Старшие биты при записи в байт отбрасываются: остаётся ${r.u8}.`):'Результат помещается в байт, ничего не потеряно.'}
+  c.append(h('div',{cls:'row'},h('code',0,'a'),h('div',{style:'flex:1;min-width:0'},ra),oa),h('div',{cls:'row'},h('code',0,'b'),h('div',{style:'flex:1;min-width:0'},rb),ob),h('div',{cls:'row mt'},opb),st,bitsBox,note);draw();
+}
+
+function endianTab(c){
+  head(c,'Порядок байтов','Введи значение и посмотри, как оно лежит в памяти. Адреса условные, как в SRAM у STM32.');
+  let n=4,big=false;const inp=h('input',{value:'12345678',maxlength:8,spellcheck:'false','aria-label':'шестнадцатеричное значение',style:'font:600 15px ui-monospace,Menlo,Consolas,monospace;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--fg);width:124px',on:{input:draw}});
+  const tb=[['uint16_t',2],['uint32_t',4]].map(([t,k])=>{const e=h('button',{cls:'b mono',on:{click:()=>{n=k;draw()}}},t);e.dataset.k=k;return e});
+  const eb=[['little-endian',false],['big-endian',true]].map(([t,k])=>{const e=h('button',{cls:'b',on:{click:()=>{big=k;draw()}}},t);e.dataset.k=k;return e});
+  const box=h('div',{cls:'mem mt'}),note=h('div',{cls:'note'});
+  function draw(){tb.forEach(e=>e.setAttribute('aria-pressed',+e.dataset.k===n));eb.forEach(e=>e.setAttribute('aria-pressed',(e.dataset.k==='true')===big));
+    const raw=inp.value.replace(/[^0-9a-fA-F]/g,'')||'0';const v=parseInt(raw,16)%(2**(8*n));
+    const bs=bytesOf(v,n,big);box.replaceChildren(...bs.map((b,i)=>h('div',{cls:'cell mono'+(i===0?' tg':'')},h('span',{cls:'a'},hex(0x20000000+i)),h('span',{cls:'v'},b.toString(16).toUpperCase().padStart(2,'0')),h('span',{cls:'m'},i===0?'младший адрес':''))));
+    const shown=hex(v,n*2);note.innerHTML=(big?'Big-endian: старший байт идёт первым. Так часто передают числа в сетевых протоколах, поэтому при разборе пакета байты приходится собирать вручную.':'Little-endian, как на Cortex-M и ПК: младший байт идёт первым.')+` Значение: <code>${shown}</code>.`}
+  c.append(h('div',{cls:'row'},h('span',{class:'mono'},'0x'),inp,tb),h('div',{cls:'row mt'},eb),box,note);draw();
+}
+
+function stackTab(c){
+  head(c,'Стек вызовов','Пройди вызов функции по шагам: аргументы копируются в новый кадр, а при возврате он исчезает.');
+  const code=['int clamp(int v, int lo, int hi) {','    if (v > hi) return hi;','    return v;','}','','int main() {','    int a = 5000;','    int r = clamp(a, 0, 4095);','    return r;','}'];
+  const M=(a,r)=>[['a',a],['r',r]].filter(x=>x[1]!=null);
+  const CL=[['адрес возврата','в main'],['v','5000'],['lo','0'],['hi','4095']];
+  const steps=[
+   {l:5,m:M(),t:'Программа входит в `main`. Для функции создаётся кадр стека.'},
+   {l:6,m:M(5000),ch:'a',t:'Переменная `a` живёт в кадре `main`.'},
+   {l:7,m:M(5000),f:CL,ch:'v',t:'Вызов `clamp`: аргументы **копируются** в новый кадр, стек растёт вниз. `v` — отдельная копия `a`.'},
+   {l:1,m:M(5000),f:CL,t:'Условие `5000 > 4095` истинно, поэтому функция вернёт `hi`.'},
+   {l:7,m:M(5000,4095),ch:'r',t:'Кадр `clamp` освобождён сдвигом указателя вершины. Его данные больше использовать нельзя. Результат записан в `r`.'},
+   {l:8,m:M(5000,4095),t:'`main` возвращает значение и завершается. На Cortex-M первые аргументы обычно идут через регистры `R0`–`R3`, но логика копии та же.'}
+  ].map(s=>({...s,t:s.t.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}));
+  const fr=(name,vars,s,top)=>h('div',{cls:'frame'+(top?' top':'')},h('small',0,name),vars.length?vars.map(([k,v])=>h('div',{cls:'cell mono'+(s.ch===k||(s.ch==='v'&&name.startsWith('clamp'))?' ch':'')},h('span',{cls:'a'},k),h('span',{cls:'v'},v))):h('span',{cls:'a',style:'font-size:12px;color:var(--muted)'},'пока пусто'));
+  stepper(c,code,steps,s=>h('div',0,h('div',{cls:'hint',style:'margin:0 0 4px;font-size:12px'},'старшие адреса ↑'),fr('кадр main',s.m,s,!s.f),s.f?fr('кадр clamp',s.f,s,true):null,h('div',{cls:'sp'},'↑ SP, вершина стека')));
+}
+tabs([['Байт',byteTab],['Promotion',promoTab],['Порядок байтов',endianTab],['Стек',stackTab]]);
+</script></body></html>

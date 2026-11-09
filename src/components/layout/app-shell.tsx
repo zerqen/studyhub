@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Brain, CalendarDays, CheckSquare, Compass, FolderOpen, Home, Menu, MonitorPlay, NotebookPen, Settings, X } from "lucide-react";
+import { BookOpen, Brain, CalendarDays, CheckSquare, Compass, Cpu, FolderOpen, Home, Menu, MonitorPlay, NotebookPen, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { cn, initials } from "@/lib/utils";
@@ -21,6 +21,7 @@ const nav = [
   { href: "/tasks", label: "Задачи", icon: CheckSquare },
   { href: "/calendar", label: "Календарь", icon: CalendarDays },
   { href: "/learn", label: "Изучаю", icon: Compass },
+  { href: "/embedded", label: "Embedded", icon: Cpu },
   { href: "/notes", label: "Заметки", icon: NotebookPen },
   { href: "/interactives", label: "Интерактивы", icon: MonitorPlay },
   { href: "/files", label: "Файлы", icon: FolderOpen },

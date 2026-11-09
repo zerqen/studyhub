@@ -1,0 +1,194 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Структуры и фильтр</title><style>:root{color-scheme:light;--bg:#f7f7f9;--surface:#fff;--subtle:#f0f0f4;--line:#dfe0e6;--fg:#1c1e26;--muted:#646b7a;--accent:#5b5bd6;--acct:#e9e9fb;--ok:#14745a;--okt:#dcf3ec;--bad:#b3341f;--badt:#fbe5e0;--warn:#975a05;--warnt:#fbeed8;--inp:#c2700a}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#14151a;--surface:#1c1e25;--subtle:#262932;--line:#343845;--fg:#ececf1;--muted:#a0a6b4;--accent:#8080e6;--acct:#2e2e58;--ok:#55cfa9;--okt:#163a30;--bad:#f28e7b;--badt:#472019;--warn:#e7b566;--warnt:#43321a;--inp:#c78426}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:21px;line-height:1.2;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+nav.tabs{display:flex;gap:4px;margin:0 0 12px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{flex:none;border:1px solid transparent;background:none;color:var(--muted);padding:7px 9px;border-radius:7px;font:500 13.5px Inter,system-ui,sans-serif;cursor:pointer;min-height:38px}
+nav.tabs button[aria-selected=true]{background:var(--surface);color:var(--fg);border-color:var(--line)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card[hidden]{display:none}
+h2{font-size:16px;margin:0 0 3px}
+.hint{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+code,.mono,pre{font-family:ui-monospace,'SF Mono','Cascadia Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace}
+code{font-size:.92em;background:var(--subtle);padding:1px 4px;border-radius:4px}
+button.b,select{font:500 13.5px Inter,system-ui,sans-serif;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;min-height:38px;cursor:pointer;transition:background .15s,border-color .15s}
+button.b:hover{background:var(--subtle)}
+button.b.p{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){button.b.p{color:#14151a}}
+button.b.p:hover{filter:brightness(1.07);background:var(--accent)}
+button.b:disabled{opacity:.42;cursor:default}
+button.b[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mt{margin-top:12px}
+.bits{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px}
+.bit{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;height:46px;font:600 17px ui-monospace,Menlo,Consolas,monospace;cursor:pointer;padding:0;transition:background .15s}
+.bit[aria-pressed=true]{background:var(--acct);border-color:var(--accent)}
+.bit.static{cursor:default;height:32px;font-size:14px}
+.blab{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;text-align:center;color:var(--muted);font-size:11px;margin:0 0 3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px}
+.stat{background:var(--subtle);border-radius:7px;padding:7px 9px;min-width:0}
+.stat small{display:block;color:var(--muted);font-size:11.5px}
+.stat b{font:600 14px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.note{border-radius:7px;padding:9px 11px;font-size:14px;margin-top:10px;background:var(--subtle)}
+.note.ok{background:var(--okt);color:var(--ok)}.note.bad{background:var(--badt);color:var(--bad)}.note.warn{background:var(--warnt);color:var(--warn)}
+.note code{background:transparent;padding:0}
+.split{display:grid;gap:10px;grid-template-columns:1fr}
+@media (min-width:640px){.split{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}}
+.code{background:var(--subtle);border-radius:8px;padding:8px 0;font-size:13px;line-height:1.55;overflow-x:auto}
+.code div{padding:0 10px;white-space:pre;border-left:3px solid transparent;min-height:1.55em}
+.code div.on{background:var(--acct);border-left-color:var(--accent)}
+.k{color:#8a3aa0}.t{color:#0f7a78}.n{color:#b23a50}.c{color:var(--muted)}
+@media (prefers-color-scheme:dark){.k{color:#d7a0ea}.t{color:#6fd1cd}.n{color:#f0a0ae}}
+.mem{font-size:13px;display:grid;gap:3px}
+.cell{display:grid;grid-template-columns:92px minmax(58px,auto) minmax(0,1fr);gap:8px;align-items:center;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--surface);transition:background .15s}
+.cell .a{color:var(--muted);font-size:12px}.cell .v{font-weight:600}.cell .m{color:var(--accent);font-size:12px;text-align:right;font-family:Inter,system-ui,sans-serif}
+.cell.ch{background:var(--acct);border-color:var(--accent)}
+.cell.tg{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.cell.off{opacity:.55;border-style:dashed}
+.frame{border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:5px}
+.frame>small{display:block;font-weight:600;font-size:12px;color:var(--muted);margin-bottom:4px}
+.frame.top{border-color:var(--accent)}
+.frame .cell{grid-template-columns:minmax(72px,auto) minmax(0,1fr)}
+.sp{font-size:12px;color:var(--warn);text-align:right;font-weight:500}
+.tape{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:2px}
+.by{height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font:12px ui-monospace,Menlo,Consolas,monospace;background:var(--subtle);color:var(--muted);transition:background .15s}
+.by.e1{background:var(--line)}
+.by.hit{background:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.by.hit{color:#14151a}}
+.by.out{background:none;outline:1px dashed var(--line);outline-offset:-1px}
+.by.hit.out{background:var(--bad);color:#fff;outline:0}
+@media (prefers-color-scheme:dark){.by.hit.out{color:#14151a}}
+.by.pad{background:var(--badt);color:var(--bad)}
+.by.f{background:var(--acct);color:var(--fg);font-weight:600}
+.by.f.alt{background:var(--okt)}
+.flist{display:grid;gap:4px}
+.frow{display:flex;align-items:center;gap:4px;font:13.5px ui-monospace,Menlo,Consolas,monospace}
+.frow span{flex:1;min-width:0}
+.frow button{min-width:38px;padding:4px}
+.led{width:30px;height:30px;border-radius:50%;background:var(--subtle);border:1px solid var(--line);flex:none;transition:background .15s,box-shadow .15s}
+.led.on{background:#3d8bff;box-shadow:0 0 14px #3d8bff;border-color:#3d8bff}
+input[type=range]{width:100%;accent-color:var(--accent);height:30px}
+.num{font:600 15px ui-monospace,Menlo,Consolas,monospace;min-width:44px;text-align:right}
+.lg{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin-bottom:2px}
+.lg i{display:inline-block;width:14px;height:2px;margin-right:5px;vertical-align:middle;border-radius:1px}
+svg text{font-family:Inter,system-ui,sans-serif}
+.cols2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.ring{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.slot{border:1px solid var(--line);border-radius:7px;padding:6px 4px;text-align:center;font:600 16px ui-monospace,Menlo,Consolas,monospace;transition:background .15s}
+.slot small{display:block;font:11px Inter,system-ui,sans-serif;color:var(--muted)}
+.slot.nx{border-color:var(--inp);box-shadow:inset 0 -3px 0 var(--inp)}
+.slot.nw{background:var(--acct);border-color:var(--accent)}
+.log{font-size:13px;background:#1c1e26;color:#eef0f2;border-radius:7px;padding:8px 10px;min-height:66px;white-space:pre-wrap;margin:8px 0 0}
+</style></head><body><main><h1>Структуры и фильтр</h1><p class="sub">Интерактив к лекции 3. Структуры и классы</p></main><script>const $=(s,r=document)=>r.querySelector(s);
+function h(t,a,...k){const e=document.createElement(t);for(const x in a||{}){if(x==='on')for(const v in a.on)e.addEventListener(v,a.on[v]);else if(x==='cls')e.className=a[x];else if(x==='html')e.innerHTML=a[x];else if(a[x]!==false&&a[x]!=null)e.setAttribute(x,a[x])}for(const c of k.flat())if(c!=null)e.append(c);return e}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hl(line){
+  const i=line.indexOf('//');let code=i<0?line:line.slice(0,i),com=i<0?'':line.slice(i);
+  code=esc(code).replace(/\b(return|if|else|const|class|public|private|struct|for|while|static|volatile)\b/g,'<span class=k>$1</span>').replace(/\b(int|void|bool|uint8_t|uint16_t|uint32_t|uint64_t|double|float)\b/g,'<span class=t>$1</span>').replace(/\b(0x[0-9A-Fa-f]+|\d+)\b/g,'<span class=n>$1</span>');
+  return code+(com?'<span class=c>'+esc(com)+'</span>':'');
+}
+const hex=(v,w=8)=>'0x'+(v>>>0).toString(16).toUpperCase().padStart(w,'0');
+function tabs(list){
+  const nav=h('nav',{cls:'tabs',role:'tablist'}),box=h('div');
+  const items=list.map(([name,fn])=>{const card=h('section',{cls:'card',hidden:true});fn(card);box.append(card);
+    const b=h('button',{role:'tab','aria-selected':'false',on:{click:()=>pick(b,card)}},name);nav.append(b);return [b,card]});
+  function pick(b,c){items.forEach(([x,y])=>{x.setAttribute('aria-selected',x===b);y.hidden=y!==c});if(c.onshow)c.onshow()}
+  pick(...items[0]);$('main').append(nav,box);
+}
+function head(c,title,hint){c.append(h('h2',0,title),h('p',{cls:'hint',html:hint}))}
+function stepper(c,code,steps,render){
+  const pre=h('div',{cls:'code mono'}),view=h('div'),note=h('div',{cls:'note'}),count=h('span',{cls:'hint',style:'margin:0 0 0 auto'});
+  const lines=code.map(l=>{const d=h('div',{html:hl(l)||' '});pre.append(d);return d});
+  const prev=h('button',{cls:'b',on:{click:()=>go(i-1)}},'← Назад'),next=h('button',{cls:'b p',on:{click:()=>go(i+1)}},'Шаг →'),first=h('button',{cls:'b',on:{click:()=>go(0)}},'Сначала');
+  let i=0;
+  function go(n){i=Math.max(0,Math.min(steps.length-1,n));const s=steps[i];lines.forEach((d,k)=>d.classList.toggle('on',k===s.l));view.replaceChildren(...[render(s)].flat());note.innerHTML=s.t.replace(/`([^`]+)`/g,(m,x)=>'<code>'+esc(x)+'</code>');count.textContent=`шаг ${i+1} из ${steps.length}`;prev.disabled=i===0;next.disabled=i===steps.length-1}
+  c.append(h('div',{cls:'split'},pre,view),note,h('div',{cls:'row mt'},prev,next,first,count));go(0);
+  return {go};
+}
+
+// ===== логика (проверяется тестом) =====
+const TYPES={uint8_t:1,uint16_t:2,uint32_t:4,uint64_t:8};
+function layout(fields){let off=0,al=1;const out=[];for(const t of fields){const s=TYPES[t];al=Math.max(al,s);off=Math.ceil(off/s)*s;out.push({t,off,s});off+=s}const size=fields.length?Math.ceil(off/al)*al:0;return {fields:out,size,used:fields.reduce((a,t)=>a+TYPES[t],0)}}
+class MovingAverage{constructor(n=4){this.d=new Array(n).fill(0);this.pos=0;this.sum=0}add(x){this.sum+=x;this.sum-=this.d[this.pos];this.d[this.pos]=x;this.pos=(this.pos+1)%this.d.length;return Math.floor(this.sum/this.d.length)}}
+window.__t={layout,MovingAverage};
+
+function padTab(c){
+  head(c,'Выравнивание','Собери структуру и меняй порядок полей. Компилятор расставит пустые байты, и размер изменится.');
+  let f=['uint8_t','uint32_t','uint8_t'];
+  const list=h('div',{cls:'flist'}),adds=Object.keys(TYPES).map(t=>h('button',{cls:'b mono',on:{click:()=>{if(f.length<8){f.push(t);draw()}}}},'+ '+t.replace('_t','')));
+  const tape=h('div',{cls:'tape mt'}),st=h('div',{cls:'stats mt'}),note=h('div',{cls:'note'});
+  const best=h('button',{cls:'b p',on:{click:()=>{f=[...f].sort((a,b)=>TYPES[b]-TYPES[a]);draw()}}},'От больших к маленьким');
+  const clear=h('button',{cls:'b',on:{click:()=>{f=['uint8_t','uint32_t','uint8_t'];draw()}}},'Как в лекции');
+  const nm=i=>String.fromCharCode(97+i);
+  function draw(){
+    list.replaceChildren(h('div',{class:'mono',style:'font-size:13.5px'},'struct S {'),...f.map((t,i)=>h('div',{cls:'frow'},h('span',0,`  ${t} ${nm(i)};`),h('button',{cls:'b','aria-label':'выше',disabled:i===0,on:{click:()=>{[f[i-1],f[i]]=[f[i],f[i-1]];draw()}}},'↑'),h('button',{cls:'b','aria-label':'ниже',disabled:i===f.length-1,on:{click:()=>{[f[i+1],f[i]]=[f[i],f[i+1]];draw()}}},'↓'),h('button',{cls:'b','aria-label':'удалить',on:{click:()=>{f.splice(i,1);draw()}}},'✕'))),h('div',{class:'mono',style:'font-size:13.5px'},'};'));
+    adds.forEach(b=>b.disabled=f.length>=8);
+    const L=layout(f);const map=Array(L.size).fill(null);L.fields.forEach((x,i)=>{for(let k=0;k<x.s;k++)map[x.off+k]=i});
+    tape.replaceChildren(...map.map(i=>h('div',{cls:'by '+(i==null?'pad':'f'+(i%2?' alt':''))},i==null?'·':nm(i))));
+    st.replaceChildren(...[['sizeof(S)',L.size],['полезно, байт',L.used],['впустую, байт',L.size-L.used]].map(([a,b])=>h('div',{cls:'stat'},h('small',0,a),h('b',0,String(b)))));
+    const sorted=[...f].sort((a,b)=>TYPES[b]-TYPES[a]);const ideal=layout(sorted).size;
+    note.className='note '+(L.size===ideal?'ok':'warn');
+    note.textContent=!f.length?'Добавь поле.':L.size===ideal?(L.size===L.used?'Без единого пустого байта.':'Для этого набора полей меньше не получится: хвост нужен, чтобы элементы массива оставались выровненными.'):`Можно уменьшить на ${L.size-ideal} байт: расставь поля от больших к маленьким.`}
+  c.append(list,h('div',{cls:'row mt'},adds),tape,st,note,h('div',{cls:'row mt'},best,clear));draw();
+}
+
+function filterTab(c){
+  head(c,'Скользящее среднее','Подавай отсчёты и смотри, как работает кольцевой буфер: старое значение вычитается, новое прибавляется.');
+  let F,inp,out,fresh;
+  function reset(){F=new MovingAverage();inp=[];out=[];fresh=-1}
+  const s=h('input',{type:'range',min:0,max:1000,step:50,value:800,'aria-label':'отсчёт',on:{input:e=>{val.textContent=e.target.value}}}),val=h('span',{cls:'num'},'800');
+  const add=x=>{if(inp.length>=24){inp.shift();out.shift()}fresh=F.pos;inp.push(x);out.push(F.add(x))};
+  const ring=h('div',{cls:'ring mt'}),st=h('div',{cls:'stats mt'}),chart=h('div',{cls:'mt'}),tip=h('div',{cls:'hint',style:'margin:2px 0 0;min-height:1.5em'});
+  let hover=null;
+  function draw(){
+    ring.replaceChildren(...F.d.map((v,i)=>h('div',{cls:'slot'+(i===F.pos?' nx':'')+(i===fresh?' nw':'')},h('small',0,`[${i}]`),String(v))));
+    st.replaceChildren(...[['pos_ (следующая замена)',F.pos],['sum_',F.sum],['среднее',out.length?out[out.length-1]:0]].map(([a,b])=>h('div',{cls:'stat'},h('small',0,a),h('b',0,String(b)))));
+    drawChart();
+  }
+  function drawChart(){
+    const W=Math.max(300,chart.clientWidth||640),H=190,L=38,R=62,T=8,B=20,x=i=>L+(inp.length<2?0:i*(W-L-R)/(Math.max(inp.length-1,1))),y=v=>T+(1000-v)*(H-T-B)/1000;
+    let g='';for(const v of [0,500,1000])g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${y(v)+4}" font-size="12" text-anchor="end" fill="var(--muted)">${v}</text>`;
+    if(inp.length){
+      const path=a=>a.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)).join(' ');
+      g+=`<path d="${path(inp)}" fill="none" stroke="var(--inp)" stroke-width="2"/><path d="${path(out)}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+      const n=inp.length-1;g+=`<circle cx="${x(n)}" cy="${y(inp[n])}" r="4" fill="var(--inp)" stroke="var(--surface)" stroke-width="2"/><circle cx="${x(n)}" cy="${y(out[n])}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`;
+      const same=Math.abs(y(inp[n])-y(out[n]))<14;
+      g+=`<text x="${x(n)+8}" y="${y(inp[n])+(same?-3:4)}" font-size="12" fill="var(--fg)">вход</text><text x="${x(n)+8}" y="${y(out[n])+(same?13:4)}" font-size="12" fill="var(--fg)">среднее</text>`;
+      if(hover!=null&&hover<inp.length)g+=`<line x1="${x(hover)}" x2="${x(hover)}" y1="${T}" y2="${H-B}" stroke="var(--muted)" stroke-width="1"/>`;
+      inp.forEach((_,i)=>{const w=Math.max((W-L-R)/Math.max(inp.length-1,1),14);g+=`<rect data-i="${i}" x="${x(i)-w/2}" y="${T}" width="${w}" height="${H-T-B}" fill="transparent"/>`});
+    }
+    chart.innerHTML=`<div class="lg"><span><i style="background:var(--inp)"></i>вход</span><span><i style="background:var(--accent)"></i>среднее</span></div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="График входа и среднего">${g}</svg>`;
+    chart.querySelectorAll('rect').forEach(r=>{const f=()=>{hover=+r.dataset.i;tip.textContent=`Отсчёт ${hover+1}: вход ${inp[hover]}, среднее ${out[hover]}`;chart.querySelectorAll('.hv').forEach(e=>e.remove());const l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('class','hv');l.setAttribute('x1',x(hover));l.setAttribute('x2',x(hover));l.setAttribute('y1',T);l.setAttribute('y2',H-B);l.setAttribute('stroke','var(--muted)');r.parentNode.insertBefore(l,r.parentNode.firstChild)};r.addEventListener('pointerenter',f);r.addEventListener('pointerdown',f)});
+    if(!inp.length)tip.textContent='Подай первый отсчёт.';else if(hover==null)tip.textContent=`Последний отсчёт: вход ${inp[inp.length-1]}, среднее ${out[out.length-1]}`;
+  }
+  const clearH=()=>{hover=null};
+  const go=x=>{add(x);clearH();draw()};
+  c.append(h('div',{cls:'row'},h('div',{style:'flex:1;min-width:0'},s),val),h('div',{cls:'row'},h('button',{cls:'b p',on:{click:()=>go(+s.value)}},'Подать отсчёт'),h('button',{cls:'b',on:{click:()=>{reset();[400,400,800,800,800,800].forEach(add);clearH();draw()}}},'Пример из лекции'),h('button',{cls:'b',on:{click:()=>{reset();for(let i=0;i<4;i++)add(0);for(let i=0;i<8;i++)add(1000);clearH();draw()}}},'Скачок'),h('button',{cls:'b',on:{click:()=>{reset();clearH();draw()}}},'Сброс')),ring,st,chart,tip);
+  reset();draw();
+  c.onshow=drawChart;window.addEventListener('resize',()=>{if(!c.hidden)drawChart()});
+}
+
+function raiiTab(c){
+  head(c,'RAII','Деструктор срабатывает на любом пути выхода. Сравни ранний и обычный возврат.');
+  const code=['int readShared(bool early) {','    Guard g;','    if (early) return -1;','    return 42;','}   // здесь объект g уничтожается'];
+  const run=early=>[
+    {l:0,log:[],live:false,t:`Вызов <code>readShared(${early})</code>. Объекта <code>g</code> ещё нет.`},
+    {l:1,log:['прерывания выкл'],live:true,t:'Конструктор <code>Guard</code> запретил прерывания: критическая секция открыта.'},
+    {l:2,log:['прерывания выкл'],live:true,t:early?'<code>early</code> истинно, функция выходит раньше конца.':'<code>early</code> ложно, идём дальше.'},
+    ...(early?[]:[{l:3,log:['прерывания выкл'],live:true,t:'Обычный <code>return</code>.'}]),
+    {l:4,log:['прерывания выкл','прерывания вкл'],live:false,t:'Компилятор сам вызвал деструктор при выходе: прерывания снова разрешены.'},
+    {l:4,log:['прерывания выкл','прерывания вкл',String(early?-1:42)],live:false,t:`Функция вернула ${early?-1:42}. Забыть включить прерывания здесь невозможно.`}
+  ];
+  const box=h('div');let early=true;
+  const bs=[['Ранний выход',true],['Обычный выход',false]].map(([t,v])=>{const e=h('button',{cls:'b',on:{click:()=>{early=v;mount()}}},t);e.dataset.v=v;return e});
+  function mount(){bs.forEach(e=>e.setAttribute('aria-pressed',(e.dataset.v==='true')===early));box.replaceChildren();stepper(box,code,run(early),s=>h('div',0,h('div',{cls:'stat'},h('small',0,'объект g'),h('b',0,s.live?'жив':'не существует')),h('pre',{cls:'log'},s.log.join('\n'))))}
+  c.append(h('div',{cls:'row',style:'margin-bottom:10px'},bs),box);mount();
+}
+tabs([['Выравнивание',padTab],['Фильтр',filterTab],['RAII',raiiTab]]);
+</script></body></html>
