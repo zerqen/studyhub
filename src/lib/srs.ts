@@ -12,9 +12,9 @@ export type SrsState = {
 };
 
 export const GRADES: { grade: Grade; label: string; key: string }[] = [
-  { grade: 0, label: "Забыл", key: "1" },
-  { grade: 1, label: "Трудно", key: "2" },
-  { grade: 2, label: "Хорошо", key: "3" },
+  { grade: 0, label: "Не вспомнил", key: "1" },
+  { grade: 1, label: "С трудом", key: "2" },
+  { grade: 2, label: "Вспомнил", key: "3" },
   { grade: 3, label: "Легко", key: "4" },
 ];
 
@@ -70,4 +70,18 @@ export function previewLabel(prev: SrsState, grade: Grade) {
 
 export function isDue(srsDue: Date | string | null | undefined, now = new Date()) {
   return !srsDue || new Date(srsDue).getTime() <= now.getTime();
+}
+
+/** Подпись под кнопкой оценки в карточке: «снова через 10 мин», «через 1 день», «через 3 дня», «через 2 мес.» */
+export function whenLabel(prev: SrsState, grade: Grade) {
+  const n = schedule(prev, grade).interval;
+  if (n === 0) return "снова через 10 мин";
+  if (n < 30) {
+    const a = n % 10;
+    const b = n % 100;
+    const word = a === 1 && b !== 11 ? "день" : a >= 2 && a <= 4 && (b < 12 || b > 14) ? "дня" : "дней";
+    return `через ${n} ${word}`;
+  }
+  if (n < 365) return `через ${Math.round(n / 30)} мес.`;
+  return "через год";
 }

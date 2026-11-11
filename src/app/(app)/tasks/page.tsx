@@ -28,7 +28,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         subtasks: { select: { id: true, title: true, status: true, dueDate: true, parentId: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
         tags: { select: { tag: { select: { name: true } } } },
         questions: { select: { id: true } },
-        _count: { select: { attachments: true } },
+        _count: { select: { attachments: true, contextualComments: true } },
       },
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
     }),

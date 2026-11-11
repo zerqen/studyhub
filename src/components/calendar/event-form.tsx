@@ -7,6 +7,7 @@ import { NotebookPen, Trash2 } from "lucide-react";
 import { openLectureForEvent } from "@/actions/schedule";
 import { createEvent, deleteEvent, updateEvent } from "@/actions/events";
 import { EVENT_KINDS, RECURRENCE } from "@/lib/schedule";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Field, Input, Select } from "../ui/field";
 import { useToast } from "../ui/toast";
@@ -94,9 +95,9 @@ export function EventForm({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {homework}
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="flex flex-col gap-4">
         {event && event.kind === "LECTURE" && event.subjectId ? (
           <button
             type="button"
@@ -121,52 +122,54 @@ export function EventForm({
           </button>
         ) : null}
         {teacher ? <p className="text-sm text-muted">Преподаватель: {teacher}</p> : null}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Тип">
-            <Select value={v.kind} onChange={(e) => set({ kind: e.target.value })}>
-              {EVENT_KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Предмет">
-            <Select value={v.subjectId} onChange={(e) => set({ subjectId: e.target.value })}>
-              <option value="">—</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
+        <div role="radiogroup" aria-label="Тип" className="flex flex-wrap gap-1.5">
+          {EVENT_KINDS.map((k) => (
+            <button
+              key={k.value}
+              type="button"
+              role="radio"
+              aria-checked={v.kind === k.value}
+              onClick={() => set({ kind: k.value })}
+              className={cn(
+                "h-[34px] rounded-full border px-3 text-[13px] font-medium transition-colors",
+                v.kind === k.value ? "border-fg bg-fg text-bg" : "border-line bg-surface text-fg hover:border-fg/30",
+              )}
+            >
+              {k.label}
+            </button>
+          ))}
         </div>
-        <Field label="Название" hint="Можно оставить пустым — подставится тип и предмет" error={err}>
-          <Input value={v.title} onChange={(e) => set({ title: e.target.value })} placeholder="Например, Матанализ — лекция" />
+        <Field label="Предмет">
+          <Select value={v.subjectId} onChange={(e) => set({ subjectId: e.target.value })}>
+            <option value="">Без предмета</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
         </Field>
-        <div className="grid grid-cols-[1fr_auto] items-end gap-3">
+        <Field label="Название" error={err}>
+          <Input value={v.title} onChange={(e) => set({ title: e.target.value })} placeholder="Можно не писать — подставится тип и предмет" />
+        </Field>
+        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
           <Field label="Дата">
-            <Input type="date" value={v.date} onChange={(e) => set({ date: e.target.value })} required />
+            <Input type="date" value={v.date} onChange={(e) => set({ date: e.target.value })} required className="px-2.5" />
           </Field>
-          <label className="flex h-9 cursor-pointer items-center gap-2 text-sm">
-            <input type="checkbox" checked={v.allDay} onChange={(e) => set({ allDay: e.target.checked })} /> Весь день
-          </label>
+          <Field label="Начало">
+            <Input type="time" value={v.start} onChange={(e) => set({ start: e.target.value })} required={!v.allDay} disabled={v.allDay} className="px-2.5" />
+          </Field>
+          <Field label="Конец">
+            <Input type="time" value={v.end} onChange={(e) => set({ end: e.target.value })} disabled={v.allDay} className="px-2.5" />
+          </Field>
         </div>
-        {!v.allDay ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Начало">
-              <Input type="time" value={v.start} onChange={(e) => set({ start: e.target.value })} required />
-            </Field>
-            <Field label="Конец">
-              <Input type="time" value={v.end} onChange={(e) => set({ end: e.target.value })} />
-            </Field>
-          </div>
-        ) : null}
-        <Field label="Аудитория / место">
-          <Input value={v.location} onChange={(e) => set({ location: e.target.value })} placeholder="ГУК Б-415" />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <label className="flex min-h-6 cursor-pointer items-center gap-2 self-start text-[13px] text-[#424655] dark:text-fg/80">
+          <input type="checkbox" checked={v.allDay} onChange={(e) => set({ allDay: e.target.checked })} className="h-[18px] w-[18px] accent-[rgb(var(--accent))]" /> Весь день
+        </label>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3">
+          <Field label="Аудитория">
+            <Input value={v.location} onChange={(e) => set({ location: e.target.value })} placeholder="ГУК Б-415" />
+          </Field>
           <Field label="Повтор">
             <Select value={v.recurrence} onChange={(e) => set({ recurrence: e.target.value })}>
               {RECURRENCE.map((r) => (
@@ -176,12 +179,12 @@ export function EventForm({
               ))}
             </Select>
           </Field>
-          {v.recurrence ? (
-            <Field label="До даты" hint="Пусто — без конца">
-              <Input type="date" value={v.repeatUntil} onChange={(e) => set({ repeatUntil: e.target.value })} />
-            </Field>
-          ) : null}
         </div>
+        {v.recurrence ? (
+          <Field label="Повторять до" hint="Пусто — без конца">
+            <Input type="date" value={v.repeatUntil} onChange={(e) => set({ repeatUntil: e.target.value })} />
+          </Field>
+        ) : null}
         <div className="flex gap-2">
           {event ? (
             <Button
@@ -199,8 +202,8 @@ export function EventForm({
               <Trash2 className="h-4 w-4" /> Удалить
             </Button>
           ) : null}
-          <Button type="submit" loading={busy} className="flex-1">
-            {event ? "Сохранить" : "Добавить"}
+          <Button type="submit" loading={busy} className="h-[46px] flex-1 rounded-[11px] text-[15px]">
+            {event ? "Сохранить" : "Добавить в календарь"}
           </Button>
         </div>
         {event?.recurrence ? <p className="text-xs text-muted">Изменения применяются ко всем повторам этого события.</p> : null}

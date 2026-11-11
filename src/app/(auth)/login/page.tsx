@@ -31,15 +31,15 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-3.5">
       <Field label="Email">
-        <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+        <Input type="email" autoComplete="email" className="h-11 rounded-[10px] text-[15px]" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
       </Field>
       <Field label="Пароль">
-        <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <Input type="password" autoComplete="current-password" className="h-11 rounded-[10px] text-[15px]" value={password} onChange={(e) => setPassword(e.target.value)} required />
       </Field>
       {err ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p> : null}
-      <Button type="submit" className="w-full" size="lg" loading={busy}>
+      <Button type="submit" className="mt-1 h-[46px] w-full rounded-[11px] text-[15px] font-semibold" size="lg" loading={busy}>
         Войти
       </Button>
     </form>
@@ -50,11 +50,12 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Вход"
-      hint="С возвращением! Продолжим подготовку."
+      tab="login"
+      hint="С возвращением — продолжим подготовку."
       footer={
         <p>
           Нет аккаунта?{" "}
-          <Link className="font-medium text-accent hover:underline" href="/register">
+          <Link className="font-semibold text-accent hover:underline" href="/register">
             Зарегистрироваться
           </Link>
         </p>

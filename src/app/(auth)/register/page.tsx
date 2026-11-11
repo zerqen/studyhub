@@ -50,36 +50,38 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Регистрация"
-      hint="Доступ к сайту открывается после подтверждения."
+      tab="register"
+      hint="Пара полей — и можно начинать."
       footer={
         <p>
           Уже есть аккаунт?{" "}
-          <Link className="font-medium text-accent hover:underline" href="/login">
+          <Link className="font-semibold text-accent hover:underline" href="/login">
             Войти
           </Link>
         </p>
       }
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-3.5">
         <Field label="Имя">
-          <Input autoComplete="name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} required autoFocus />
+          <Input autoComplete="name" className="h-11 rounded-[10px] text-[15px]" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} required autoFocus />
         </Field>
         <Field label="Email">
-          <Input type="email" autoComplete="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} required />
+          <Input type="email" autoComplete="email" className="h-11 rounded-[10px] text-[15px]" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} required />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Пароль">
-            <Input type="password" autoComplete="new-password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} required minLength={8} />
+            <Input type="password" autoComplete="new-password" className="h-11 rounded-[10px] text-[15px]" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} required minLength={8} />
           </Field>
           <Field label="Повтор">
-            <Input type="password" autoComplete="new-password" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} required />
+            <Input type="password" autoComplete="new-password" className="h-11 rounded-[10px] text-[15px]" value={v.confirm} onChange={(e) => setV({ ...v, confirm: e.target.value })} required />
           </Field>
         </div>
         <p className="-mt-2 text-xs text-muted">Минимум 8 символов</p>
         {err ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p> : null}
-        <Button type="submit" className="w-full" size="lg" loading={busy}>
+        <Button type="submit" className="mt-1 h-[46px] w-full rounded-[11px] text-[15px] font-semibold" size="lg" loading={busy}>
           Создать аккаунт
         </Button>
+        <p className="rounded-[10px] bg-[#F8F6F1] px-3 py-2.5 text-xs leading-relaxed text-fg/75 dark:bg-subtle">Доступ к сайту открывается после подтверждения.</p>
       </form>
     </AuthCard>
   );

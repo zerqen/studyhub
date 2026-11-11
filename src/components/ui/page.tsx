@@ -25,7 +25,7 @@ export function PageHeader({
       ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="heading text-[28px] leading-tight sm:text-[32px]">{title}</h1>
           {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -51,7 +51,7 @@ export function Section({
     <section className={cn("card", className)}>
       {title ? (
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="text-sm font-semibold">{title}</h2>
+          <h2 className="heading text-base">{title}</h2>
           {action}
         </div>
       ) : null}

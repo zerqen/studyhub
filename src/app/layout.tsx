@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, PT_Serif } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
 // Inter поддерживает кириллицу (прежний Outfit — нет, и русский текст падал в системный шрифт)
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-sans", display: "swap" });
+const serif = PT_Serif({ subsets: ["latin", "cyrillic"], weight: ["400", "700"], variable: "--font-serif", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "StudyHub", template: "%s · StudyHub" },
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f8f8fa" },
+    { media: "(prefers-color-scheme: light)", color: "#f3f1ec" },
     { media: "(prefers-color-scheme: dark)", color: "#0d0d12" },
   ],
 };
@@ -23,7 +24,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans`}>
+      <body className={`${inter.variable} ${serif.variable} font-sans`}>
         <Providers>{children}</Providers>
       </body>
     </html>

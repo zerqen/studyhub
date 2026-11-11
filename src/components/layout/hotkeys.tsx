@@ -25,6 +25,12 @@ export function Hotkeys({ subjects }: { subjects: { id: string; name: string }[]
   const [help, setHelp] = useState(false);
 
   useEffect(() => {
+    const open = () => setCreating(true);
+    window.addEventListener("task-create-open", open);
+    return () => window.removeEventListener("task-create-open", open);
+  }, []);
+
+  useEffect(() => {
     let g = 0;
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;

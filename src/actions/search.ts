@@ -9,7 +9,13 @@ export type SearchHit = {
   title: string;
   href: string;
   hint?: string;
+  /** Цвет предмета — для значка с буквами */
+  color?: string;
+  /** Тип задачи (HOMEWORK, LAB…) — для значка «ДЗ», «ЛБ» */
+  kind?: string;
 };
+
+const shortDate = (d: Date) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", timeZone: "UTC" }).format(d).replace(".", "");
 
 export async function globalSearch(query: string): Promise<ActionResult<SearchHit[]>> {
   return withUser(async (userId) => {
@@ -17,8 +23,13 @@ export async function globalSearch(query: string): Promise<ActionResult<SearchHi
     if (q.length < 1) return [];
     const contains = { contains: q, mode: "insensitive" as const };
     const [subjects, tasks, subtasks, tickets, questions, notes, files, tags, lectures] = await Promise.all([
-      prisma.subject.findMany({ where: { userId, OR: [{ name: contains }, { teacher: contains }] }, take: 8 }),
-      prisma.task.findMany({ where: { userId, OR: [{ title: contains }, { description: contains }] }, take: 8 }),
+      prisma.subject.findMany({ where: { userId, OR: [{ name: contains }, { teacher: contains }] }, select: { id: true, name: true, color: true, examDate: true, selfStudy: true }, take: 8 }),
+      prisma.task.findMany({
+        where: { userId, OR: [{ title: contains }, { description: contains }] },
+        select: { id: true, title: true, kind: true, dueDate: true, status: true, subject: { select: { name: true } } },
+        orderBy: { dueDate: { sort: "desc", nulls: "last" } },
+        take: 8,
+      }),
       prisma.subtask.findMany({ where: { userId, title: contains }, take: 8 }),
       prisma.ticket.findMany({
         where: { userId, OR: [{ title: contains }, { description: contains }] },
@@ -41,7 +52,14 @@ export async function globalSearch(query: string): Promise<ActionResult<SearchHi
     ]);
 
     const hits: SearchHit[] = [
-      ...subjects.map((s) => ({ type: "subject" as const, id: s.id, title: s.name, href: `/subjects/${s.id}` })),
+      ...subjects.map((s) => ({
+        type: "subject" as const,
+        id: s.id,
+        title: s.name,
+        href: s.selfStudy ? `/learn/${s.id}` : `/subjects/${s.id}`,
+        color: s.color,
+        hint: s.selfStudy ? "Изучаю" : s.examDate ? `экзамен · ${shortDate(s.examDate)}` : undefined,
+      })),
       ...lectures.map((l) => ({
         type: "lecture" as const,
         id: l.id,
@@ -49,7 +67,14 @@ export async function globalSearch(query: string): Promise<ActionResult<SearchHi
         href: `/lectures/${l.id}`,
         hint: l.subject.name,
       })),
-      ...tasks.map((t) => ({ type: "task" as const, id: t.id, title: t.title, href: `/tasks/${t.id}` })),
+      ...tasks.map((t) => ({
+        type: "task" as const,
+        id: t.id,
+        title: t.title,
+        href: `/tasks/${t.id}`,
+        kind: t.kind,
+        hint: [t.subject?.name, t.dueDate ? shortDate(t.dueDate) : null, t.status === "DONE" ? "сделано" : null].filter(Boolean).join(" · ") || undefined,
+      })),
       ...subtasks.map((t) => ({
         type: "subtask" as const,
         id: t.id,

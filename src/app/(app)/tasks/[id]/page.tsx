@@ -25,5 +25,5 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
     prisma.question.findMany({ where: { userId: user.id }, select: { id: true, text: true, subjectId: true }, orderBy: { createdAt: "desc" } }),
   ]);
   if (!task) notFound();
-  return <TaskDetail task={JSON.parse(JSON.stringify(task))} subjects={subjects} questions={questions} />;
+  return <TaskDetail task={JSON.parse(JSON.stringify(task))} subjects={subjects} questions={questions} author={user.name.split(" ")[0]} />;
 }

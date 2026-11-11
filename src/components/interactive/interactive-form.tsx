@@ -2,12 +2,12 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileCode2, Upload } from "lucide-react";
+import { FileCode2, ShieldCheck, Upload } from "lucide-react";
 import { createInteractive, updateInteractive } from "@/actions/interactives";
 import { MAX_INTERACTIVE_BYTES, htmlTitle } from "@/lib/interactive";
 import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea } from "../ui/field";
-import { Segmented } from "../ui/page";
+import { cn } from "@/lib/utils";
 import { useToast } from "../ui/toast";
 
 export type SubjectOption = { id: string; name: string; emoji: string; lectures: { id: string; title: string; number: number | null }[] };
@@ -81,21 +81,37 @@ export function InteractiveForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[13px] font-medium text-fg/80">{editing ? "Заменить HTML (необязательно)" : "Страница"}</span>
-          <Segmented value={source} onChange={setSource} options={[["file", "Файл"], ["code", "Вставить код"]] as const} />
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2.5">
+        {editing ? <span className="text-[13px] text-[#424655] dark:text-fg/80">Заменить HTML (необязательно)</span> : null}
+        <div role="tablist" aria-label="Источник" className="grid grid-cols-2 gap-1 rounded-[10px] bg-subtle p-1">
+          {(
+            [
+              ["file", "Файл .html"],
+              ["code", "Вставить код"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={source === id}
+              onClick={() => setSource(id)}
+              className={cn("h-[34px] rounded-lg text-[13px] font-semibold transition-colors", source === id ? "bg-surface shadow-sm" : "text-fg/75 hover:text-fg")}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         {source === "file" ? (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex w-full items-center gap-3 rounded-xl border border-dashed border-line px-4 py-5 text-left text-sm transition-colors hover:border-accent/40 hover:bg-subtle/40"
+            className="flex w-full items-center gap-3 rounded-xl border border-dashed border-[#CFC9B8] bg-[#F8F6F1] p-5 text-left text-sm transition-colors hover:border-accent/50 dark:border-line dark:bg-subtle/40"
           >
             {fileName ? <FileCode2 className="h-5 w-5 shrink-0 text-accent" /> : <Upload className="h-5 w-5 shrink-0 text-muted" />}
             <span className="min-w-0">
-              <span className="block truncate font-medium">{fileName || "Выбрать .html-файл"}</span>
+              <span className="block truncate font-semibold">{fileName || "Выбрать или перетащить файл"}</span>
               <span className="block text-xs text-muted">Например, симуляция из чата с Claude · до 5 МБ</span>
             </span>
           </button>
@@ -103,10 +119,11 @@ export function InteractiveForm({
           <Textarea
             value={html}
             onChange={(e) => onCode(e.target.value)}
-            rows={8}
+            rows={6}
             spellCheck={false}
             placeholder={"<!doctype html>\n<html>…</html>"}
-            className="font-mono text-xs"
+            className="font-mono text-[13px]"
+            aria-label="HTML-код"
           />
         )}
         <input ref={fileRef} type="file" accept=".html,.htm,text/html" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
@@ -115,12 +132,12 @@ export function InteractiveForm({
       <Field label="Название">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Возьмётся из <title>, если оставить пустым" maxLength={160} required={editing} />
       </Field>
-      <Field label="Описание" hint="Что показывает схема, что покрутить">
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={2000} />
+      <Field label="Что показывает">
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={2000} placeholder="Что покрутить, на что смотреть" />
       </Field>
 
       {subjects ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3">
           <Field label="Предмет">
             <Select
               value={subject}
@@ -152,11 +169,12 @@ export function InteractiveForm({
       ) : null}
 
       {err ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{err}</p> : null}
-      <div className="flex justify-end">
-        <Button type="submit" loading={busy}>
-          {editing ? "Сохранить" : "Добавить"}
-        </Button>
-      </div>
+      <p className="flex items-center gap-2 text-xs text-muted">
+        <ShieldCheck className="h-4 w-4 shrink-0" /> Страница запускается изолированно и не видит твой аккаунт
+      </p>
+      <Button type="submit" loading={busy} className="h-[46px] w-full rounded-[11px] text-[15px]">
+        {editing ? "Сохранить" : "Добавить интерактив"}
+      </Button>
     </form>
   );
 }

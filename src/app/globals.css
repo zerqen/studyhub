@@ -2,20 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Цвета хранятся как RGB-каналы, чтобы Tailwind мог делать прозрачность: bg-accent/10 */
+/* Цвета хранятся как RGB-каналы, чтобы Tailwind мог делать прозрачность: bg-accent/10.
+   Светлая тема — «Чернила»: тёплая бумага, тёмно-синие чернила, один синий акцент. */
 :root {
-  --bg: 248 248 250;
-  --surface: 255 255 255;
-  --subtle: 243 244 246;
-  --line: 228 228 234;
-  --fg: 17 17 27;
-  --muted: 107 109 124;
-  --accent: 79 70 229;
+  --bg: 243 241 236;
+  --surface: 255 254 251;
+  --subtle: 240 237 230;
+  --line: 222 218 208;
+  --fg: 29 33 48;
+  --muted: 87 91 106;
+  --accent: 45 91 210;
   --accent-fg: 255 255 255;
-  --accent-soft: 238 237 254;
-  --success: 22 163 74;
-  --warning: 217 119 6;
-  --danger: 220 38 38;
+  --accent-soft: 232 238 252;
+  --success: 37 100 69;
+  --warning: 180 95 6;
+  --danger: 185 28 28;
+  /* Срочное: КР завтра, просроченное — терракота, не красный */
+  --urgent: 143 53 16;
+  --urgent-soft: 251 227 207;
   color-scheme: light;
 }
 
@@ -32,6 +36,8 @@
   --success: 74 222 128;
   --warning: 251 191 36;
   --danger: 248 113 113;
+  --urgent: 251 146 60;
+  --urgent-soft: 67 32 12;
   color-scheme: dark;
 }
 
@@ -65,6 +71,9 @@
   }
   .card-hover {
     @apply transition-colors duration-150 hover:border-fg/20;
+  }
+  .heading {
+    @apply font-serif font-bold tracking-normal;
   }
   .label-xs {
     @apply text-xs font-medium uppercase tracking-wide text-muted;

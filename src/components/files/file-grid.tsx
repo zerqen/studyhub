@@ -5,6 +5,7 @@ import { Download, ExternalLink, File, FileArchive, FileAudio, FileImage, FileTe
 import { deleteAttachment } from "@/actions/attachments";
 import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
+import { extTone } from "@/lib/subject-view";
 
 type FileItem = { id: string; originalName: string; mimeType: string; size: number };
 
@@ -26,7 +27,8 @@ function ext(name: string) {
   return i > 0 ? name.slice(i + 1).toUpperCase() : "";
 }
 
-export function FileGrid({ files, compact }: { files: FileItem[]; compact?: boolean }) {
+/** list — строки «PDF · имя · размер», как в материалах предмета */
+export function FileGrid({ files, compact, list }: { files: FileItem[]; compact?: boolean; list?: boolean }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const toast = useToast();
   const visible = files.filter((f) => !hidden.has(f.id));
@@ -47,6 +49,35 @@ export function FileGrid({ files, compact }: { files: FileItem[]; compact?: bool
   }
 
   if (!visible.length) return compact ? null : <p className="text-sm text-muted">Файлов пока нет.</p>;
+
+  if (list) {
+    return (
+      <ul>
+        {visible.map((f) => {
+          const [fg, bg] = extTone(f.originalName);
+          return (
+            <li key={f.id} className="group grid min-h-[50px] grid-cols-[44px_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-[#ECE8DF] px-4 dark:border-line sm:px-5">
+              <span className="rounded-md py-1 text-center text-[11px] font-bold" style={{ color: fg, background: bg }}>
+                {ext(f.originalName).slice(0, 4) || "ФАЙЛ"}
+              </span>
+              <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="truncate text-sm transition-colors hover:text-accent" title={f.originalName}>
+                {f.originalName}
+              </a>
+              <span className="text-xs tabular-nums text-muted">{fileSize(f.size)}</span>
+              <span className="flex gap-0.5 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                <a className="rounded-md p-1.5 text-muted hover:bg-subtle hover:text-fg" href={`/api/files/${f.id}?download=1`} aria-label={`Скачать ${f.originalName}`}>
+                  <Download className="h-3.5 w-3.5" />
+                </a>
+                <button className="rounded-md p-1.5 text-muted hover:bg-danger/10 hover:text-danger" onClick={() => setDel(f.id)} aria-label={`Удалить ${f.originalName}`}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   if (compact) {
     return (

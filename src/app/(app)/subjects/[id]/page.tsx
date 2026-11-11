@@ -52,7 +52,7 @@ export default async function SubjectPage({
       },
       tasks: {
         orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-        select: { id: true, title: true, status: true, priority: true, dueDate: true },
+        select: { id: true, title: true, status: true, priority: true, dueDate: true, kind: true, description: true },
       },
       notes: { orderBy: { updatedAt: "desc" }, select: { id: true, title: true, content: true, color: true, updatedAt: true } },
       attachments: { where: { lectureId: null }, orderBy: { createdAt: "desc" }, select: { id: true, originalName: true, mimeType: true, size: true } },

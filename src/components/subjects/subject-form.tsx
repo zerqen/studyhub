@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
-import { EMOJIS, SUBJECT_COLORS, SUBJECT_TYPES } from "@/lib/constants";
+import { SUBJECT_COLORS, SUBJECT_TYPES } from "@/lib/constants";
+import { subjectShort } from "@/lib/home";
 import { createSubject, updateSubject } from "@/actions/subjects";
-import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Field, Input, Select, Textarea } from "../ui/field";
 import { useToast } from "../ui/toast";
@@ -52,10 +51,14 @@ export function SubjectForm({ id, initial, onDone }: { id?: string; initial?: Pa
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div className="flex gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-lg" style={{ background: `${v.color}1a` }}>
-          {v.emoji}
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-[15px] font-bold transition-colors"
+          style={{ background: `${v.color}1f`, color: v.color }}
+        >
+          {v.name.trim() ? subjectShort(v.name) : "?"}
         </span>
         <Input
           value={v.name}
@@ -63,13 +66,14 @@ export function SubjectForm({ id, initial, onDone }: { id?: string; initial?: Pa
           required
           maxLength={120}
           placeholder="Например, Математический анализ"
-          aria-label="Название"
+          aria-label="Название предмета"
           autoFocus
+          className="h-12 text-base"
         />
       </div>
       {err ? <p className="text-xs text-danger">{err}</p> : null}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Тип">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3">
+        <Field label="Сдача">
           <Select value={v.type} onChange={(e) => setV({ ...v, type: e.target.value })}>
             {SUBJECT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -86,41 +90,27 @@ export function SubjectForm({ id, initial, onDone }: { id?: string; initial?: Pa
         <Input value={v.teacher} onChange={(e) => setV({ ...v, teacher: e.target.value })} placeholder="Необязательно" />
       </Field>
       <Field label="Описание">
-        <Textarea rows={2} value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} placeholder="Формат экзамена, требования, ссылки…" />
+        <Textarea rows={2} value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} placeholder="Формат экзамена, требования, ссылки" />
       </Field>
-      <div>
-        <div className="mb-1.5 text-[13px] font-medium text-fg/80">Иконка</div>
-        <div className="flex flex-wrap gap-1">
-          {EMOJIS.map((e) => (
-            <button
-              type="button"
-              key={e}
-              className={cn("grid h-9 w-9 place-items-center rounded-lg text-lg transition-colors", v.emoji === e ? "bg-accent/10 ring-1 ring-accent/40" : "hover:bg-subtle")}
-              onClick={() => setV({ ...v, emoji: e })}
-            >
-              {e}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <div className="mb-1.5 text-[13px] font-medium text-fg/80">Цвет</div>
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2">
+        <span className="text-[13px] text-[#424655] dark:text-fg/80">Цвет</span>
+        <div role="radiogroup" aria-label="Цвет" className="flex flex-wrap gap-2">
           {SUBJECT_COLORS.map((c) => (
             <button
               type="button"
               key={c}
+              role="radio"
+              aria-checked={v.color === c}
               aria-label={`Цвет ${c}`}
-              className="grid h-7 w-7 place-items-center rounded-full text-white transition-transform active:scale-90"
-              style={{ background: c }}
+              className="h-8 w-8 rounded-full outline-offset-2 transition-transform active:scale-90"
+              style={{ background: c, outline: v.color === c ? "2px solid rgb(var(--fg))" : "none" }}
               onClick={() => setV({ ...v, color: c })}
-            >
-              {v.color === c ? <Check className="h-4 w-4" /> : null}
-            </button>
+            />
           ))}
         </div>
+        <span className="text-xs text-muted">Значок — первые буквы названия, как на странице предметов</span>
       </div>
-      <Button type="submit" loading={busy} className="w-full">
+      <Button type="submit" loading={busy} className="h-[46px] w-full rounded-[11px] text-[15px]">
         {id ? "Сохранить" : "Создать предмет"}
       </Button>
     </form>

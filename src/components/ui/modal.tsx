@@ -40,20 +40,20 @@ export function Modal({
       <button className="absolute inset-0 animate-fade-in bg-black/40 dark:bg-black/60" aria-label="Закрыть" onClick={onClose} tabIndex={-1} />
       <div
         className={cn(
-          "relative z-10 flex max-h-[92dvh] w-full animate-pop-in flex-col overflow-hidden rounded-t-2xl border border-line bg-surface shadow-pop sm:max-w-lg sm:rounded-2xl",
+          "relative z-10 flex max-h-[92dvh] w-full animate-pop-in flex-col overflow-hidden rounded-t-[18px] border border-line bg-surface shadow-[0_20px_48px_rgba(29,33,48,0.18)] sm:max-w-[520px] sm:rounded-[18px]",
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
-          <div>
-            <h2 className="text-base font-semibold">{title}</h2>
-            {description ? <p className="mt-0.5 text-sm text-muted">{description}</p> : null}
+        <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5 sm:px-6 sm:pt-[22px]">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h2 className="heading text-[22px] leading-tight">{title}</h2>
+            {description ? <p className="text-[13px] text-muted">{description}</p> : null}
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Закрыть" className="-mr-2 -mt-1">
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Закрыть" className="-mr-2 h-[34px] w-[34px] shrink-0 text-muted">
+            <X className="h-[18px] w-[18px]" />
           </Button>
         </div>
-        <div className="overflow-y-auto px-5 pb-5">{children}</div>
+        <div className="overflow-y-auto px-5 pb-6 sm:px-6">{children}</div>
       </div>
     </div>
   );

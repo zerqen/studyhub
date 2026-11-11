@@ -19,18 +19,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, ChevronLeft, ChevronRight, FileUp, GraduationCap, MapPin, Plus } from "lucide-react";
 import { isOverdue, cn } from "@/lib/utils";
-import { moveTaskDate } from "@/actions/tasks";
+import { moveTaskDate, toggleTaskDone } from "@/actions/tasks";
 import { Modal } from "../ui/modal";
 import { TaskForm } from "../tasks/task-form";
-import { Button } from "../ui/button";
-import { Select } from "../ui/field";
 import { EventForm, type EditableEvent } from "./event-form";
 import { ScheduleImport } from "./schedule-import";
 import { expandEvents, kindMeta, weekParity } from "@/lib/schedule";
 import { isAssignedAt, isDueAt } from "@/lib/homework";
 import { HomeworkPanel } from "./homework-panel";
 import { taskKind } from "@/lib/task-kinds";
-import { Segmented } from "../ui/page";
 import { useToast } from "../ui/toast";
 
 export type CalTask = {
@@ -70,7 +67,9 @@ type Item = {
 
 const hhmm = (d: Date) => format(d, "HH:mm");
 
-const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+const navBtn = "grid h-9 w-9 place-items-center rounded-lg border border-line bg-surface text-[#424655] transition-colors hover:bg-subtle dark:text-muted";
 
 export function CalendarApp({
   tasks,
@@ -82,7 +81,7 @@ export function CalendarApp({
   tasks: CalTask[];
   exams: CalExam[];
   events: CalEvent[];
-  subjects: { id: string; name: string }[];
+  subjects: { id: string; name: string; color?: string }[];
   sync?: Sync;
 }) {
   const [importOpen, setImportOpen] = useState(false);
@@ -93,6 +92,8 @@ export function CalendarApp({
   const [createOn, setCreateOn] = useState<string | null>(null);
   const [eventOpen, setEventOpen] = useState<null | { event?: CalEvent; date?: string; start?: string }>(null);
   const [moved, setMoved] = useState<Record<string, string>>({});
+  const [doneOver, setDoneOver] = useState<Record<string, boolean>>({});
+  const [showDone, setShowDone] = useState(true);
   const toast = useToast();
   const router = useRouter();
   const homework = useMemo(() => tasks.filter((t) => t.kind === "HOMEWORK" && t.status !== "CANCELLED"), [tasks]);
@@ -126,15 +127,18 @@ export function CalendarApp({
       if (subjectFilter && t.subjectId !== subjectFilter) continue;
       if (t.status === "CANCELLED") continue;
       const due = moved[t.id] ?? t.dueDate;
+      const done = doneOver[t.id] ?? t.status === "DONE";
+      if (done && !showDone) continue;
       add(due, {
         kind: "task",
         id: t.id,
         title: t.kind && t.kind !== "TASK" ? `${taskKind(t.kind).label}: ${t.title}` : t.title,
         color: t.subject?.color ?? "#94a3b8",
         href: `/tasks/${t.id}`,
-        done: t.status === "DONE",
-        overdue: isOverdue(due, t.status),
-        sort: 2000,
+        done,
+        overdue: isOverdue(due, done ? "DONE" : t.status),
+        meta: [t.kind && t.kind !== "TASK" ? taskKind(t.kind).full : "Задача", t.subject?.name].filter(Boolean).join(" · "),
+        sort: done ? 3000 : 2000,
       });
     }
     const from = days[0];
@@ -158,7 +162,7 @@ export function CalendarApp({
     }
     for (const list of map.values()) list.sort((a, b) => a.sort - b.sort);
     return map;
-  }, [tasks, exams, events, subjectFilter, moved, days, homework]);
+  }, [tasks, exams, events, subjectFilter, moved, days, homework, doneOver, showDone]);
 
   const openHomework = useMemo(() => {
     const e = eventOpen?.event;
@@ -191,85 +195,140 @@ export function CalendarApp({
     } else toast.push("Задача перенесена");
   }
 
+  async function toggleDone(id: string, was: boolean) {
+    setDoneOver((m) => ({ ...m, [id]: !was }));
+    const r = await toggleTaskDone(id);
+    if (!r.ok) {
+      setDoneOver((m) => ({ ...m, [id]: was }));
+      toast.push(r.error, "err");
+    }
+  }
+
+  const upcomingExams = useMemo(() => {
+    const today = startOfDay(new Date()).getTime();
+    return exams
+      .filter((x) => x.examDate && new Date(x.examDate).getTime() >= today)
+      .sort((a, b) => a.examDate!.localeCompare(b.examDate!))
+      .slice(0, 6);
+  }, [exams]);
+
   function shift(dir: 1 | -1) {
     setCursor((c) => (view === "month" ? addMonths(c, dir) : addDays(c, 7 * dir)));
   }
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <h1 className="mr-auto text-2xl font-semibold tracking-tight">Календарь</h1>
-        <Button variant="ghost" onClick={() => setImportOpen(true)} title="Загрузить расписание из файла .ics или по ссылке">
-          <FileUp className="h-4 w-4" /> {sync.url ? "Расписание" : "Импорт .ics"}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => setEventOpen({ date: format(selected, "yyyy-MM-dd") })}
-        >
-          <CalendarPlus className="h-4 w-4" /> Пара / событие
-        </Button>
-        <Button onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}>
-          <Plus className="h-4 w-4" /> Задача
-        </Button>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex items-center">
-          <Button variant="ghost" size="icon-sm" onClick={() => shift(-1)} aria-label="Назад">
+      <div className="mb-4 flex flex-wrap items-center gap-x-2.5 gap-y-3 sm:gap-x-4">
+        <h1 className="heading mr-2 w-full text-[28px] sm:w-auto sm:text-[34px]">Календарь</h1>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => shift(-1)} aria-label={view === "month" ? "Предыдущий месяц" : "Предыдущая неделя"} className={navBtn}>
             <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-36 text-center text-[15px] font-semibold capitalize">
+          </button>
+          <span className="heading min-w-[130px] text-center text-lg capitalize">
             {view === "month"
               ? format(cursor, "LLLL yyyy", { locale: ru })
               : `${format(days[0], "d MMM", { locale: ru })} – ${format(days[6], "d MMM", { locale: ru })}`}
-          </div>
-          <Button variant="ghost" size="icon-sm" onClick={() => shift(1)} aria-label="Вперёд">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        {view === "week" ? (
-          <span className="text-xs text-muted">
-            {(() => {
-              const p = weekParity(days[0]);
-              return `${p.week}-я неделя · ${p.odd ? "нечётная" : "чётная"}`;
-            })()}
           </span>
-        ) : null}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setCursor(new Date());
-            setSelected(startOfDay(new Date()));
-          }}
-        >
-          Сегодня
-        </Button>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} className="h-8 w-auto min-w-36 text-[13px]">
-            <option value="">Все предметы</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-          <Segmented
-            value={view}
-            onChange={setView}
-            options={[
+          <button type="button" onClick={() => shift(1)} aria-label={view === "month" ? "Следующий месяц" : "Следующая неделя"} className={navBtn}>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCursor(new Date());
+              setSelected(startOfDay(new Date()));
+            }}
+            className="ml-1 h-9 rounded-lg border border-line bg-surface px-3 text-[13px] transition-colors hover:bg-subtle"
+          >
+            Сегодня
+          </button>
+          {view === "week" ? (
+            <span className="ml-2 text-xs text-muted">
+              {(() => {
+                const p = weekParity(days[0]);
+                return `${p.week}-я неделя · ${p.odd ? "нечётная" : "чётная"}`;
+              })()}
+            </span>
+          ) : null}
+        </div>
+        <div role="group" aria-label="Вид" className="flex gap-1 rounded-[10px] bg-[#E9E5DC] p-[3px] dark:bg-subtle sm:ml-auto">
+          {(
+            [
               ["month", "Месяц"],
               ["week", "Неделя"],
-            ]}
-          />
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={view === id}
+              onClick={() => setView(id)}
+              className={cn("h-[34px] rounded-lg px-3 text-[13px] transition-colors", view === id ? "bg-surface font-semibold shadow-sm" : "text-fg/75 hover:text-fg")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 max-sm:ml-auto">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            title="Загрузить расписание из файла .ics или по ссылке"
+            aria-label={sync.url ? "Расписание" : "Импорт .ics"}
+            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3 text-[13px] text-[#424655] transition-colors hover:bg-subtle dark:text-muted"
+          >
+            <FileUp className="h-4 w-4" /> <span className="max-sm:sr-only">{sync.url ? "Расписание" : "Импорт .ics"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEventOpen({ date: format(selected, "yyyy-MM-dd") })}
+            title="Пара / событие"
+            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3 text-[13px] transition-colors hover:bg-subtle"
+          >
+            <CalendarPlus className="h-4 w-4" /> <span className="max-sm:sr-only">Пара / событие</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}
+            className="h-10 rounded-[10px] bg-accent px-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent/90 sm:px-4"
+          >
+            + Задача
+          </button>
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="card overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-line">
+      <div className="mb-[18px] flex flex-wrap items-center gap-1.5">
+        <div className="scrollbar-none -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+          {[{ id: "", name: "Все предметы", color: "#1D2130" }, ...subjects].map((sj) => {
+            const on = subjectFilter === sj.id;
+            return (
+              <button
+                key={sj.id || "all"}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setSubjectFilter(sj.id)}
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors",
+                  on ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-fg/30",
+                )}
+              >
+                <span aria-hidden className="h-2 w-2 rounded-[3px]" style={{ background: sj.color ?? "#8A8D99" }} />
+                {sj.name}
+              </button>
+            );
+          })}
+        </div>
+        <label className="ml-auto flex items-center gap-1.5 text-[13px] text-[#424655] dark:text-muted">
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+          Показывать сделанное
+        </label>
+      </div>
+
+      <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px]">
+        <section aria-label={view === "month" ? "Месяц" : "Неделя"} className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className="grid grid-cols-7 border-b border-line bg-[#F8F6F1] dark:bg-subtle/60">
             {WEEKDAYS.map((d, i) => (
-              <div key={d} className={cn("py-2 text-center text-xs font-medium text-muted", i >= 5 && "text-muted/70")}>
+              <div key={d} className={cn("px-1 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.04em] sm:px-2.5 sm:text-left", i >= 5 ? "text-muted/80" : "text-muted")}>
                 {d}
               </div>
             ))}
@@ -294,20 +353,27 @@ export function CalendarApp({
                     const id = e.dataTransfer.getData("text/task");
                     if (id) void onDrop(day, id);
                   }}
+                  aria-label={`${format(day, "d MMMM", { locale: ru })}${items.length ? `, записей: ${items.length}` : ""}`}
+                  aria-pressed={isSel}
                   className={cn(
-                    "relative cursor-pointer border-line p-1 text-left outline-none transition-colors sm:p-1.5",
-                    view === "month" ? "min-h-16 sm:min-h-24" : "min-h-40 sm:min-h-64",
+                    "relative flex cursor-pointer flex-col gap-1 border-[#ECE8DF] p-1 text-left outline-none transition-colors dark:border-line sm:p-2",
+                    view === "month" ? "min-h-16 sm:min-h-[104px]" : "min-h-40 sm:min-h-64",
                     i % 7 !== 6 && "border-r",
                     i < days.length - 7 && "border-b",
-                    outside && "bg-subtle/40",
-                    isSel ? "bg-accent/5" : "hover:bg-subtle/50",
+                    isSel
+                      ? "bg-[#F4F7FE] shadow-[inset_0_0_0_2px_rgb(var(--accent))] dark:bg-accent/10"
+                      : outside
+                        ? "bg-[#F8F6F1] hover:bg-[#F3F1EC] dark:bg-subtle/40"
+                        : i % 7 >= 5
+                          ? "bg-[#FCFBF7] hover:bg-[#F8F6F1] dark:bg-surface"
+                          : "hover:bg-[#FCFBF7] dark:hover:bg-subtle/40",
                   )}
                 >
-                  <div className="mb-1 flex justify-center sm:justify-start">
+                  <div className="flex justify-center sm:justify-start">
                     <span
                       className={cn(
-                        "grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs tabular-nums",
-                        today ? "bg-accent font-semibold text-accent-fg" : isSel ? "font-semibold text-accent" : outside ? "text-muted/60" : "text-fg/80",
+                        "grid h-[26px] min-w-[26px] place-items-center rounded-full px-1 text-[13px] tabular-nums",
+                        today ? "bg-accent font-bold text-white" : outside ? "font-medium text-muted/70" : "font-medium text-fg",
                       )}
                     >
                       {format(day, "d")}
@@ -319,7 +385,7 @@ export function CalendarApp({
                       <span key={`${it.kind}-${it.id}`} className="h-1.5 w-1.5 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} />
                     ))}
                   </div>
-                  <div className="hidden space-y-0.5 sm:block">
+                  <div className="hidden flex-col gap-1 sm:flex">
                     {items.slice(0, limit).map((it) => (
                       <div
                         key={`${it.kind}-${it.id}`}
@@ -337,90 +403,112 @@ export function CalendarApp({
                         }}
                         title={[it.time, it.title, it.meta].filter(Boolean).join(" · ")}
                         className={cn(
-                          "flex items-center gap-1 truncate rounded px-1 py-px text-[11px] leading-4",
-                          it.kind === "exam" ? "font-semibold text-white" : "bg-subtle text-fg/90 hover:bg-line",
+                          "flex items-center gap-1 truncate rounded-md border-l-[3px] px-1.5 py-[3px] text-[11px] leading-[1.3] transition-[filter] hover:brightness-95",
+                          it.kind === "exam" && "font-semibold text-white",
                           it.kind === "task" && "cursor-grab",
-                          it.done && "text-muted line-through",
+                          it.done && "bg-[#F3F1EC] text-muted/90 line-through dark:bg-subtle",
+                          !it.done && it.overdue && "bg-urgent-soft text-fg",
                         )}
-                        style={it.kind === "exam" ? { background: it.color } : undefined}
+                        style={{
+                          borderLeftColor: it.color,
+                          ...(it.kind === "exam" ? { background: it.color } : !it.done && !it.overdue ? { background: `${it.color}14` } : {}),
+                        }}
                       >
-                        {it.kind !== "exam" ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} /> : null}
                         {it.time ? <span className="shrink-0 tabular-nums text-muted">{it.time.slice(0, 5)}</span> : null}
                         <span className="truncate">{it.title}</span>
                         {it.homework ? <span className="ml-auto shrink-0 rounded bg-warning/15 px-1 text-[10px] font-semibold text-warning">ДЗ</span> : null}
                       </div>
                     ))}
-                    {items.length > limit ? <div className="px-1 text-[11px] text-muted">ещё {items.length - limit}</div> : null}
+                    {items.length > limit ? <div className="pl-1 text-[11px] text-muted">ещё {items.length - limit}</div> : null}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        <aside className="card self-start">
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <div className="text-sm font-semibold capitalize">{format(selected, "EEEE, d MMMM", { locale: ru })}</div>
-            <Button variant="ghost" size="icon-sm" aria-label="Задача на этот день" onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="p-1.5">
+        <aside aria-label="Выбранный день" className="flex flex-col gap-3.5">
+          <section className="overflow-hidden rounded-[14px] border border-line bg-surface">
+            <div className="flex items-start justify-between gap-2 px-[18px] pb-3 pt-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted">
+                  {isSameDay(selected, new Date()) ? "сегодня · " : ""}
+                  {format(selected, "EEEE", { locale: ru })}
+                </span>
+                <h2 className="heading text-[22px]">{format(selected, "d MMMM", { locale: ru })}</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Задача на этот день"
+                title="Задача на этот день"
+                onClick={() => setCreateOn(format(selected, "yyyy-MM-dd"))}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-line bg-surface text-[#234AB0] transition-colors hover:bg-subtle dark:text-accent"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
             {selectedItems.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-muted">Ничего не запланировано</p>
+              <p className="border-t border-[#ECE8DF] px-[18px] pb-[18px] pt-3.5 text-sm text-muted dark:border-line">Ничего не запланировано</p>
             ) : (
               selectedItems.map((it) => {
-                const inner = (
-                  <>
-                    {it.kind === "exam" ? (
-                      <GraduationCap className="h-4 w-4 shrink-0" style={{ color: it.color }} />
-                    ) : (
-                      <span className="mx-1 h-2 w-2 shrink-0 rounded-full" style={{ background: it.overdue ? "rgb(var(--danger))" : it.color }} />
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className={cn("block truncate text-sm", it.done && "text-muted line-through", it.kind === "exam" && "font-medium")}>
-                        {it.kind === "exam" ? `Экзамен: ${it.title}` : it.title}
+                const sub = it.kind === "exam" ? "Экзамен" : it.kind === "task" ? it.meta : [it.time, it.meta].filter(Boolean).join(" · ");
+                const title = (
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className={cn("text-sm font-medium leading-snug", it.done && "text-muted line-through")}>{it.title}</span>
+                    {sub ? (
+                      <span className="flex items-center gap-1 truncate text-xs text-muted">
+                        {it.event?.location ? <MapPin className="h-3 w-3 shrink-0" /> : null}
+                        {sub}
                       </span>
-                      {it.time || it.meta ? (
-                        <span className="flex items-center gap-1 truncate text-xs text-muted">
-                          {it.time ? <span className="tabular-nums">{it.time}</span> : null}
-                          {it.meta ? (
-                            <>
-                              {it.time ? "·" : null}
-                              {it.event?.location ? <MapPin className="h-3 w-3" /> : null}
-                              {it.meta}
-                            </>
-                          ) : null}
-                        </span>
-                      ) : null}
-                    </span>
-                  </>
+                    ) : null}
+                  </span>
                 );
-                if (it.event) {
-                  const ev = it.event;
-                  return (
-                    <button
-                      key={`${it.kind}-${it.id}`}
-                      onClick={() => setEventOpen({ event: ev, start: it.start })}
-                      className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-subtle"
-                    >
-                      {inner}
-                    </button>
-                  );
-                }
-                return it.href ? (
-                  <Link key={`${it.kind}-${it.id}`} href={it.href} className="flex items-center gap-2 rounded-xl px-2.5 py-2 transition-colors hover:bg-subtle">
-                    {inner}
-                  </Link>
-                ) : (
-                  <div key={`${it.kind}-${it.id}`} className="flex items-center gap-2 px-2.5 py-2">
-                    {inner}
+                return (
+                  <div key={`${it.kind}-${it.id}`} className="flex min-h-[52px] items-center gap-2.5 border-t border-[#ECE8DF] px-[18px] py-2 dark:border-line">
+                    {it.kind === "task" ? (
+                      <input
+                        type="checkbox"
+                        checked={Boolean(it.done)}
+                        onChange={() => void toggleDone(it.id, Boolean(it.done))}
+                        aria-label={`Выполнено: ${it.title}`}
+                        className="h-[18px] w-[18px] shrink-0 accent-[rgb(var(--accent))]"
+                      />
+                    ) : it.kind === "exam" ? (
+                      <GraduationCap className="h-[18px] w-[18px] shrink-0" style={{ color: it.color }} />
+                    ) : (
+                      <span className="w-[18px] shrink-0" />
+                    )}
+                    <span aria-hidden className="w-1 self-stretch rounded-sm" style={{ background: it.overdue && !it.done ? "rgb(var(--urgent))" : it.color }} />
+                    {it.event ? (
+                      <button type="button" onClick={() => setEventOpen({ event: it.event, start: it.start })} className="flex min-w-0 flex-1 text-left hover:text-accent">
+                        {title}
+                      </button>
+                    ) : it.href ? (
+                      <Link href={it.href} className="flex min-w-0 flex-1 hover:text-accent">
+                        {title}
+                      </Link>
+                    ) : (
+                      title
+                    )}
                   </div>
                 );
               })
             )}
-          </div>
-          <p className="border-t border-line px-4 py-2.5 text-xs text-muted max-sm:hidden">Двойной клик по дню — новая задача. Задачи можно перетаскивать. Расписание пар — кнопка «Пара / событие» с повтором.</p>
+          </section>
+
+          {upcomingExams.length ? (
+            <section aria-label="Ближайшие экзамены" className="flex flex-col rounded-[14px] border border-line bg-surface px-[18px] py-3.5">
+              <h2 className="heading mb-1.5 text-lg">Сессия</h2>
+              {upcomingExams.map((x) => (
+                <Link key={x.id} href={`/subjects/${x.id}`} className="flex justify-between gap-2.5 border-t border-[#ECE8DF] py-2.5 text-sm hover:text-accent dark:border-line">
+                  <span className="min-w-0 truncate">{x.name}</span>
+                  <span className="heading shrink-0">{format(new Date(x.examDate!), "d MMM", { locale: ru })}</span>
+                </Link>
+              ))}
+            </section>
+          ) : null}
+
+          <p className="text-xs leading-normal text-muted max-sm:hidden">Двойной клик по дню — новая задача. Задачи можно перетаскивать между днями. Расписание пар — «Пара / событие» с повтором.</p>
         </aside>
       </div>
 

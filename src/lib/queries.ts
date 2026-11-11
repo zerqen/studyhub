@@ -40,7 +40,9 @@ export async function getDashboard(userId: string) {
         kind: true,
         subjectId: true,
         lessonAt: true,
+        updatedAt: true,
         subject: { select: { name: true, color: true } },
+        subtasks: { select: { status: true } },
       },
       orderBy: { dueDate: "asc" },
     }),
@@ -70,6 +72,16 @@ export async function getDashboard(userId: string) {
   const upcoming = open.filter((t) => t.dueDate && t.dueDate >= tomorrow).slice(0, 6);
   const exams = subjects.filter((s) => s.examDate && s.examDate >= today).slice(0, 4);
 
+  // Ближайший срок по каждому предмету — для плиток на главной
+  const nextDue = new Map<string, (typeof open)[number]>();
+  for (const t of open) {
+    if (!t.subjectId || !t.dueDate || t.dueDate < today || nextDue.has(t.subjectId)) continue;
+    nextDue.set(t.subjectId, t);
+  }
+  // Закрыто на этой неделе (с понедельника) — по времени последнего изменения
+  const monday = addDays(mskStart, -((new Date(mskStart.getTime() + 3 * 3_600_000).getUTCDay() + 6) % 7));
+  const doneThisWeek = tasks.filter((t) => t.status === "DONE" && t.updatedAt >= monday).length;
+
   const totalQuestions = questionCounts.reduce((a, c) => a + c._count._all, 0);
   const learnedQuestions = questionCounts.find((c) => c.status === "LEARNED")?._count._all ?? 0;
   const reviewQuestions = questionCounts.find((c) => c.status === "REVIEW")?._count._all ?? 0;
@@ -83,8 +95,16 @@ export async function getDashboard(userId: string) {
       examDate: s.examDate,
       questionsTotal: s.questions.length,
       questionsLeft: s.questions.filter((q) => q.status !== "LEARNED").length,
+      questionsLearned: s.questions.filter((q) => q.status === "LEARNED").length,
       progress: subjectProgress({ questions: s.questions, tasks: s.tasks }),
+      type: s.type,
+      next: (() => {
+        const t = nextDue.get(s.id);
+        return t ? { kind: t.kind, title: t.title, dueDate: t.dueDate } : null;
+      })(),
     })),
+    openTasks: open,
+    doneThisWeek,
     overdue,
     todayTasks,
     upcoming,

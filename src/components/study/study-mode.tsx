@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Eye, PenLine, RotateCcw, Shuffle, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, RotateCcw, Shuffle, Sparkles, Trophy } from "lucide-react";
 import { recordAttempt } from "@/actions/questions";
 import { DIFFICULTIES, labelOf } from "@/lib/constants";
-import { GRADES, isDue, previewLabel, schedule, type Grade, type SrsState } from "@/lib/srs";
+import { GRADES, isDue, schedule, whenLabel, type Grade, type SrsState } from "@/lib/srs";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Segmented } from "../ui/page";
 import { Markdown } from "../ui/markdown";
 import { useToast } from "../ui/toast";
 import { Pomodoro } from "./pomodoro";
-import { AnswerCheck } from "../ai/answer-check";
+import { useAnswerCheck } from "../ai/answer-check";
 import { useAiEnabled } from "../ai/use-ai";
 import { DefinitionDrill } from "./definition-drill";
 import { gradeStyle } from "./grade-style";
@@ -45,7 +45,8 @@ const filters = [
 ] as const;
 type Filter = (typeof filters)[number][0];
 
-const NEW_PER_SESSION = 20;
+/** Сколько новых вопросов добавляется в колоду «К повторению» */
+export const NEW_PER_SESSION = 20;
 
 function pick(questions: StudyQuestion[], filter: Filter) {
   if (filter === "due") {
@@ -68,21 +69,44 @@ function shuffled<T>(items: T[]) {
   return a;
 }
 
-export function StudyMode({ questions, color, showSubject, fixed }: { questions: StudyQuestion[]; color?: string; showSubject?: boolean; /** Готовая колода («10 минут»): без фильтров и помодоро */ fixed?: boolean }) {
-  const [view, setView] = useState<"cards" | "defs" | "list">("cards");
-  const [filter, setFilter] = useState<Filter>(() => (!fixed && pick(questions, "due").length ? "due" : "all"));
+export function StudyMode({
+  questions,
+  color,
+  showSubject,
+  fixed,
+  first,
+  initialView,
+}: {
+  questions: StudyQuestion[];
+  color?: string;
+  showSubject?: boolean;
+  /** Готовая колода («10 минут»): без фильтров и помодоро */
+  fixed?: boolean;
+  /** Начать с этого вопроса (кнопка «Учить» в списке): колода «Все», он первый */
+  first?: string;
+  /** С какого режима начать: карточки, определения или шпаргалка */
+  initialView?: "cards" | "defs" | "list";
+}) {
+  const [view, setView] = useState<"cards" | "defs" | "list">(initialView ?? "cards");
+  const [filter, setFilter] = useState<Filter>(() => (first ? "all" : !fixed && pick(questions, "due").length ? "due" : "all"));
   const [random, setRandom] = useState(false);
   // Колода фиксируется на время сессии — оценки не «перемешивают» её на ходу
-  const [deck, setDeck] = useState<StudyQuestion[]>(() => pick(questions, filter));
+  const [deck, setDeck] = useState<StudyQuestion[]>(() => {
+    const base = pick(questions, filter);
+    const i = first ? base.findIndex((q) => q.id === first) : -1;
+    return i > 0 ? [...base.slice(i), ...base.slice(0, i)] : base;
+  });
   const [index, setIndex] = useState(0);
   const [show, setShow] = useState(false);
   const [results, setResults] = useState<Record<string, Grade>>({});
   const [srs, setSrs] = useState<Record<string, SrsState>>({});
   // «Своими словами»: поле ответа и оценка, которую предложил ИИ
-  const [writing, setWriting] = useState(false);
-  const [suggested, setSuggested] = useState<Grade | null>(null);
+  // «Своими словами» — свой ответ к текущей карточке и проверка ассистентом
+  const [own, setOwn] = useState("");
   const ai = useAiEnabled();
   const toast = useToast();
+  const check = useAnswerCheck(deck[index]?.id ?? "");
+  const resetCheck = check.setFb;
 
   const restart = useCallback(
     (nextFilter: Filter = filter, nextRandom = random, only?: StudyQuestion[]) => {
@@ -90,11 +114,11 @@ export function StudyMode({ questions, color, showSubject, fixed }: { questions:
       setDeck(nextRandom ? shuffled(base) : base);
       setIndex(0);
       setShow(false);
-      setWriting(false);
-      setSuggested(null);
+      setOwn("");
+      resetCheck(null);
       setResults({});
     },
-    [filter, random, questions],
+    [filter, random, questions, resetCheck],
   );
 
   const current = deck[index];
@@ -107,10 +131,10 @@ export function StudyMode({ questions, color, showSubject, fixed }: { questions:
     (delta: number) => {
       setIndex((i) => Math.min(Math.max(i + delta, 0), deck.length));
       setShow(false);
-      setWriting(false);
-      setSuggested(null);
+      setOwn("");
+      resetCheck(null);
     },
-    [deck.length],
+    [deck.length, resetCheck],
   );
 
   const mark = useCallback(
@@ -129,6 +153,12 @@ export function StudyMode({ questions, color, showSubject, fixed }: { questions:
     },
     [current, deck, index, go, srs, toast],
   );
+
+  async function compare() {
+    if (!current || !own.trim()) return;
+    const fb = await check.run(own);
+    if (fb) setShow(true);
+  }
 
   useEffect(() => {
     if (view !== "cards") return;
@@ -155,7 +185,7 @@ export function StudyMode({ questions, color, showSubject, fixed }: { questions:
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className={cn("mx-auto", view === "cards" ? "max-w-5xl" : "max-w-3xl")}>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {fixed ? null : (
           <Segmented
@@ -252,114 +282,207 @@ export function StudyMode({ questions, color, showSubject, fixed }: { questions:
         </div>
       ) : current ? (
         <>
-          <div className="mb-3 flex items-center gap-3">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
-              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${(index / deck.length) * 100}%` }} />
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#E7E3DA] dark:bg-subtle">
+              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${((index + 1) / deck.length) * 100}%` }} />
             </div>
-            <span className="shrink-0 text-xs tabular-nums text-muted">
-              {index + 1} / {deck.length}
+            <span className="shrink-0 whitespace-nowrap text-[13px] tabular-nums text-muted">
+              {index + 1} из {deck.length}
             </span>
           </div>
 
-          <div key={`${current.id}-${index}`} className="card animate-slide-up overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-line px-5 py-2.5 text-xs text-muted">
-              <span className="h-2 w-2 rounded-full" style={{ background: current.subject?.color ?? color ?? "rgb(var(--accent))" }} />
-              <span className="truncate">
+          <section key={`${current.id}-${index}`} aria-label="Вопрос" className="animate-slide-up overflow-hidden rounded-2xl border border-line bg-surface">
+            <div className="flex flex-col gap-2 border-b border-[#ECE8DF] px-5 py-5 dark:border-line sm:px-7">
+              <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
                 {showSubject && current.subject ? (
-                  <Link href={`/subjects/${current.subject.id}`} className="hover:text-fg">
-                    {current.subject.emoji} {current.subject.name}
-                  </Link>
-                ) : current.lecture ? (
-                  `Лекция ${current.lecture.number ?? ""} · ${current.lecture.title}`
-                ) : (
-                  current.ticket?.title ?? "Вопрос"
-                )}
+                  <>
+                    <span className="h-2 w-2 rounded-full" style={{ background: current.subject.color }} />
+                    <Link href={`/subjects/${current.subject.id}`} className="hover:text-fg">
+                      {current.subject.name}
+                    </Link>
+                    <span>·</span>
+                  </>
+                ) : null}
+                {[
+                  current.ticketNo ? `билет ${current.ticketNo}` : current.lecture ? `лекция ${current.lecture.number ?? ""}`.trim() : null,
+                  current.srsReps === 0 ? "новый" : `повтор ${current.srsReps}`,
+                  labelOf(DIFFICULTIES, current.difficulty).toLowerCase(),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
-              <span className="ml-auto shrink-0">
-                {current.srsReps === 0 ? "новый" : `повтор ${current.srsReps}`} · {labelOf(DIFFICULTIES, current.difficulty)}
-              </span>
-            </div>
-
-            <button className="block w-full px-5 py-8 text-left sm:px-8 sm:py-10" onClick={() => setShow((v) => !v)} aria-label={show ? "Скрыть ответ" : "Показать ответ"}>
-              <div className="text-lg font-semibold leading-relaxed sm:text-xl">
+              <div className="heading text-[19px] leading-[1.45] sm:text-[21px]">
                 <Markdown>{current.text}</Markdown>
               </div>
               {current.attachments
                 .filter((a) => a.mimeType.startsWith("image/"))
                 .map((a) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={a.id} src={`/api/files/${a.id}`} alt={a.originalName} loading="lazy" className="mt-5 max-h-64 rounded-xl border border-line object-contain" />
+                  <img key={a.id} src={`/api/files/${a.id}`} alt={a.originalName} loading="lazy" className="mt-2 max-h-64 self-start rounded-xl border border-line object-contain" />
                 ))}
-            </button>
+            </div>
 
-            {writing ? (
-              <div className="border-t border-line px-5 py-4 sm:px-8">
-                <AnswerCheck
-                  questionId={current.id}
-                  autoFocus
-                  onChecked={(fb) => {
-                    setSuggested(fb.grade);
-                    setShow(true);
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))]">
+              <div className="flex flex-col gap-2.5 border-[#ECE8DF] px-5 py-5 dark:border-line max-[759px]:border-b min-[760px]:border-r sm:px-7">
+                <label htmlFor={`own-${current.id}`} className="text-xs font-semibold uppercase tracking-[0.06em] text-muted/90">
+                  Своими словами
+                </label>
+                <textarea
+                  id={`own-${current.id}`}
+                  rows={6}
+                  value={own}
+                  onChange={(e) => setOwn(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      if (ai && own.trim()) void compare();
+                      else setShow(true);
+                    }
                   }}
+                  placeholder="Напиши, что помнишь. Можно коротко и с формулами $A_{m\times n}$"
+                  className="resize-y rounded-[10px] border border-line bg-[#F8F6F1] px-3.5 py-3 text-[15px] leading-[1.55] outline-none transition-shadow placeholder:text-muted/60 focus:border-[#9DB4EE] focus:ring-[3px] focus:ring-accent-soft dark:bg-subtle/40"
                 />
+                <div className="flex flex-wrap gap-2">
+                  {ai ? (
+                    <button
+                      type="button"
+                      onClick={() => void compare()}
+                      disabled={!own.trim() || check.busy}
+                      className="inline-flex h-11 items-center gap-2 rounded-[10px] bg-accent px-4 text-sm font-semibold text-white transition-opacity disabled:opacity-45"
+                    >
+                      {check.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {check.busy ? (check.wait ? `Лимит, жду ${check.wait} с` : "Сравниваю…") : "Сравнить ответы"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setShow((v) => !v)}
+                    className={cn(
+                      "h-11 rounded-[10px] px-4 text-sm font-medium transition-colors",
+                      ai ? "border border-line bg-surface hover:bg-subtle" : "bg-accent font-semibold text-white hover:bg-accent/90",
+                    )}
+                  >
+                    {show ? "Скрыть ответ" : "Показать ответ"}
+                  </button>
+                </div>
+                <span className="text-xs text-muted">
+                  {ai
+                    ? own.trim()
+                      ? "Ассистент сверит твой текст с билетом и покажет, что упущено · Ctrl + Enter"
+                      : "«Сравнить ответы» заработает, когда напишешь свой вариант"
+                    : "Можно и не писать — просто вспомни и открой ответ (пробел)"}
+                </span>
               </div>
-            ) : null}
 
-            {show ? (
-              <div className="animate-slide-up border-t border-line bg-subtle/50 px-5 py-5 sm:px-8">
-                <div className="label-xs mb-2 text-accent">Ответ</div>
-                {current.answer ? <Markdown>{current.answer}</Markdown> : <span className="text-muted">Ответа пока нет — его можно добавить на странице вопроса.</span>}
-                {current.explanation ? (
-                  <div className="mt-3 text-sm text-muted">
-                    <Markdown>{current.explanation}</Markdown>
-                  </div>
+              <div className="relative flex flex-col gap-2.5 px-5 py-5 sm:px-7">
+                <span className="text-xs font-semibold uppercase tracking-[0.06em] text-muted/90">Ответ из билета</span>
+                <div
+                  aria-hidden={!show}
+                  className={cn("text-[15px] leading-relaxed transition-[filter] duration-200", !show && "pointer-events-none select-none blur-[7px]")}
+                >
+                  {current.answer ? <Markdown>{current.answer}</Markdown> : <span className="text-muted">Ответа пока нет — его можно добавить на странице вопроса.</span>}
+                  {current.explanation ? (
+                    <div className="mt-3 text-sm text-muted">
+                      <Markdown>{current.explanation}</Markdown>
+                    </div>
+                  ) : null}
+                </div>
+                {!show ? (
+                  <button
+                    type="button"
+                    onClick={() => setShow(true)}
+                    className="absolute inset-x-5 bottom-5 top-12 flex items-center justify-center sm:inset-x-7"
+                    aria-label="Показать ответ"
+                  >
+                    <span className="rounded-full border border-line bg-surface px-3.5 py-2 text-[13px] font-semibold shadow-[0_4px_14px_rgba(29,33,48,0.10)]">
+                      Ответ скрыт — сначала ответь сам
+                    </span>
+                  </button>
                 ) : null}
               </div>
+            </div>
+
+            {check.fb && show ? (
+              <div aria-label="Разбор ассистента" className="mx-5 mb-5 flex animate-slide-up flex-col gap-2.5 rounded-xl border border-[#C9D6F6] bg-[#F4F7FE] px-[18px] py-4 dark:border-accent/30 dark:bg-accent/10 sm:mx-7">
+                <span className="text-sm font-semibold">Разбор ассистента</span>
+                {check.fb.verdict ? (
+                  <p className="text-sm">
+                    <Markdown inline>{check.fb.verdict}</Markdown>
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-x-6 gap-y-2.5 text-sm leading-normal">
+                  {(
+                    [
+                      ["Есть в твоём ответе", check.fb.good, "text-[#256445] dark:text-success"],
+                      ["Не хватает", check.fb.missing, "text-urgent"],
+                      ["Ошибки", check.fb.mistakes, "text-danger"],
+                    ] as const
+                  ).map(([title, items, tone]) =>
+                    items.length ? (
+                      <div key={title} className="flex flex-col gap-1">
+                        <span className={cn("text-xs font-semibold", tone)}>{title}</span>
+                        {items.map((x, k) => (
+                          <span key={k}>
+                            <Markdown inline>{x}</Markdown>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null,
+                  )}
+                </div>
+                <span className="text-[13px] text-[#424655] dark:text-muted">
+                  Предлагаю оценку «{GRADES[check.fb.grade].label}» — подсветил её ниже, но решаешь ты.
+                </span>
+              </div>
             ) : null}
 
-            <div className="border-t border-line p-3">
-              {show ? (
-                <div className="grid grid-cols-4 gap-1.5">
-                  {GRADES.map((g) => (
+            <div className="flex flex-col gap-2.5 border-t border-[#ECE8DF] bg-[#F8F6F1] px-5 pb-5 pt-4 dark:border-line dark:bg-subtle/40 sm:px-7">
+              <span className="text-[13px] text-[#424655] dark:text-muted">{show ? "Насколько легко вспомнил?" : "Оценка откроется после ответа"}</span>
+              <div className={cn("grid grid-cols-2 gap-2 transition-opacity sm:grid-cols-4", !show && "opacity-50")}>
+                {GRADES.map((g) => {
+                  const picked = check.fb && check.fb.grade === g.grade;
+                  return (
                     <button
                       key={g.grade}
+                      type="button"
+                      disabled={!show}
                       onClick={() => mark(g.grade)}
                       className={cn(
-                        "flex flex-col items-center rounded-xl border border-line px-1 py-2 transition-colors",
+                        "flex min-h-[60px] flex-col items-start gap-0.5 rounded-xl border px-3.5 py-2.5 text-left transition-colors disabled:cursor-not-allowed",
                         gradeStyle[g.grade],
-                        suggested === g.grade && "ring-2 ring-accent/50",
+                        picked && "border-2 border-accent bg-accent-soft",
                       )}
-                      title={suggested === g.grade ? "Так оценил ИИ" : undefined}
+                      title={picked ? "Так предложил ассистент" : undefined}
                     >
-                      <span className="text-sm font-medium">{g.label}</span>
-                      <span className="text-[11px] text-muted">
-                        {previewLabel(stateOf(current), g.grade)}
-                        <kbd className="ml-1 hidden sm:inline">· {g.key}</kbd>
+                      <span className="text-[15px] font-semibold text-fg">
+                        <span className="mr-1.5 text-xs font-normal text-muted">{g.key}</span>
+                        {g.label}
                       </span>
+                      <span className="text-xs">{whenLabel(stateOf(current), g.grade)}</span>
                     </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" onClick={() => go(-1)} disabled={index === 0} aria-label="Назад">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  {ai && !writing ? (
-                    <Button variant="secondary" size="lg" onClick={() => setWriting(true)} title="Ответить своими словами — ИИ проверит">
-                      <PenLine className="h-4 w-4" /> <span className="hidden sm:inline">Своими словами</span>
-                    </Button>
-                  ) : null}
-                  <Button size="lg" className="flex-1" onClick={() => setShow(true)}>
-                    <Eye className="h-4 w-4" /> Показать ответ
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => go(1)} aria-label="Пропустить">
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
+          </section>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 text-[13px] text-muted">
+            <span className="flex items-center gap-1">
+              <button type="button" onClick={() => go(-1)} disabled={index === 0} aria-label="Назад" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-subtle disabled:opacity-40">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => go(1)} aria-label="Пропустить" title="Пропустить" className="grid h-8 w-8 place-items-center rounded-lg hover:bg-subtle">
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <span className="ml-1">
+                {deck[index + 1] ? `Дальше — ${deck[index + 1].ticketNo ? `билет ${deck[index + 1].ticketNo}` : "следующий вопрос"} · осталось ${deck.length - index - 1}` : "Это последний вопрос"}
+              </span>
+            </span>
+            <Link href={`/questions/${current.id}`} className="text-[#234AB0] hover:underline dark:text-accent">
+              Редактировать ответ в билете
+            </Link>
           </div>
-          <p className="mt-3 hidden text-center text-xs text-muted sm:block">Пробел — ответ · 1–4 — оценка · ← → — листать</p>
+          <p className="mt-2 hidden text-center text-xs text-muted sm:block">Пробел — показать ответ · 1–4 — оценка · ← → — листать</p>
         </>
       ) : null}
     </div>

@@ -128,16 +128,23 @@ export function PushSettings() {
 
   if (status && !status.publicKey) {
     return (
-      <p className="text-sm text-muted">
-        Push пока не настроен на сервере: нужно добавить ключи <code className="rounded bg-subtle px-1">VAPID_PUBLIC_KEY</code> и{" "}
-        <code className="rounded bg-subtle px-1">VAPID_PRIVATE_KEY</code> в переменные окружения Vercel.
-      </p>
+      <div className="mt-1 flex flex-col gap-2 rounded-[10px] border border-[#F3D9B8] bg-[#FBF3E8] px-3.5 py-3 dark:border-urgent/30 dark:bg-urgent/10">
+        <span className="text-sm font-semibold text-urgent">Уведомления на телефон пока не работают</span>
+        <span className="text-[13px] text-[#424655] dark:text-muted">Колокольчик в приложении работает, а push на телефон ещё не включён на сервере.</span>
+        <details>
+          <summary className="flex min-h-6 cursor-pointer items-center text-xs text-muted">Для разработчика</summary>
+          <span className="text-xs text-[#424655] dark:text-muted">
+            Добавить ключи <code className="rounded border border-[#ECE8DF] bg-surface px-1 font-mono">VAPID_PUBLIC_KEY</code> и{" "}
+            <code className="rounded border border-[#ECE8DF] bg-surface px-1 font-mono">VAPID_PRIVATE_KEY</code> в переменные окружения Vercel.
+          </span>
+        </details>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-col">
+      <div className="flex min-h-[64px] flex-wrap items-center gap-3 border-t border-[#ECE8DF] py-3 dark:border-line">
         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${subscribed ? "bg-success/10 text-success" : "bg-subtle text-muted"}`}>
           {subscribed ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
         </span>
@@ -163,21 +170,19 @@ export function PushSettings() {
       </div>
 
       {status ? (
-        <div className="space-y-2 border-t border-line pt-3 text-sm">
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input type="checkbox" className="mt-0.5" checked={status.morning} onChange={(e) => void togglePref("morning", e.target.checked)} />
-            <span>
-              <span className="block font-medium">Утренняя сводка · около 8:00</span>
-              <span className="block text-xs text-muted">Сколько пар и где первая, что повторить, задачи и домашка на сегодня, скорые экзамены</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input type="checkbox" className="mt-0.5" checked={status.evening} onChange={(e) => void togglePref("evening", e.target.checked)} />
-            <span>
-              <span className="block font-medium">Вечернее напоминание · около 20:00</span>
-              <span className="block text-xs text-muted">Домашка и задачи на завтра; если сегодня не повторял — сколько вопросов ждёт. Пустые дни — без уведомлений</span>
-            </span>
-          </label>
+        <div>
+          <Toggle
+            on={status.morning}
+            onChange={(v) => void togglePref("morning", v)}
+            title="Утренняя сводка · около 8:00"
+            hint="Сколько пар и где первая, что повторить, задачи и домашка на сегодня, скорые экзамены"
+          />
+          <Toggle
+            on={status.evening}
+            onChange={(v) => void togglePref("evening", v)}
+            title="Вечернее напоминание · около 20:00"
+            hint="Домашка и задачи на завтра; если сегодня не повторял — сколько вопросов ждёт. Пустые дни — без уведомлений"
+          />
         </div>
       ) : null}
 
@@ -185,6 +190,7 @@ export function PushSettings() {
         <Button
           variant="ghost"
           size="sm"
+          className="mt-2 self-start"
           loading={busy}
           onClick={async () => {
             setBusy(true);
@@ -197,6 +203,28 @@ export function PushSettings() {
           <Send className="h-3.5 w-3.5" /> Прислать проверочное
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+/** Переключатель в строке настроек */
+function Toggle({ on, onChange, title, hint }: { on: boolean; onChange: (v: boolean) => void; title: string; hint: string }) {
+  return (
+    <div className="flex min-h-[58px] items-center justify-between gap-3 border-t border-[#ECE8DF] py-2.5 dark:border-line">
+      <span className="flex min-w-0 flex-col">
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-xs text-muted">{hint}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={title}
+        onClick={() => onChange(!on)}
+        className={`flex h-[26px] w-11 shrink-0 items-center rounded-full p-[3px] transition-colors ${on ? "justify-end bg-accent" : "justify-start bg-[#CFC9B8] dark:bg-line"}`}
+      >
+        <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+      </button>
     </div>
   );
 }

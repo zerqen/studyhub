@@ -9,6 +9,8 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        // Заголовки — PT Serif: хорошая кириллица, «тетрадный» характер
+        serif: ["var(--font-serif)", "Georgia", "Cambria", "serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
@@ -22,6 +24,7 @@ const config: Config = {
         success: token("success"),
         warning: token("warning"),
         danger: token("danger"),
+        urgent: { DEFAULT: token("urgent"), soft: token("urgent-soft") },
       },
       borderRadius: {
         xl: "0.75rem",

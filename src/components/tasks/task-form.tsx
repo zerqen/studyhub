@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { TASK_PRIORITIES, TASK_STATUSES } from "@/lib/constants";
 import { createTask, updateTask } from "@/actions/tasks";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,7 @@ export function TaskForm({
   });
   const [stages, setStages] = useState<Stage[]>(() => (KIND_STAGES[(initial?.kind ?? "TASK") as TaskKind] ?? []).map((title) => ({ title, dueDate: "" })));
   const [stagesTouched, setStagesTouched] = useState(false);
-  const [more, setMore] = useState(Boolean(id && (initial?.startDate || initial?.tags || initial?.questionId)));
+  const [more, setMore] = useState(Boolean(id && (initial?.startDate || initial?.tags || initial?.questionId || initial?.dueTime)));
   const [err, setErr] = useState<string>();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -73,40 +73,50 @@ export function TaskForm({
     onDone?.();
   }
 
+  const kindChip = (on: boolean) =>
+    cn(
+      "inline-flex h-[34px] items-center gap-1 rounded-full border px-3 text-[13px] font-medium transition-colors",
+      on ? "border-fg bg-fg text-bg" : "border-line bg-surface text-fg hover:border-fg/30",
+    );
+
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
-        <Input value={v.title} onChange={(e) => set({ title: e.target.value })} required autoFocus placeholder="Что нужно сделать?" aria-label="Название" className="h-10 text-[15px]" />
+        <Input
+          value={v.title}
+          onChange={(e) => set({ title: e.target.value })}
+          required
+          autoFocus
+          placeholder="Что нужно сделать?"
+          aria-label="Название"
+          className="h-12 text-base"
+        />
         {err ? <p className="mt-1 text-xs text-danger">{err}</p> : null}
       </div>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Тип">
-        {TASK_KINDS.map((k) => (
-          <button
-            key={k.value}
-            type="button"
-            role="radio"
-            aria-checked={v.kind === k.value}
-            onClick={() => {
-              set({ kind: k.value });
-              // Шаблон этапов подставляем, пока пользователь сам их не трогал
-              if (!id && !stagesTouched) setStages((KIND_STAGES[k.value] ?? []).map((title) => ({ title, dueDate: "" })));
-            }}
-            className={cn(
-              "h-8 rounded-full border px-3 text-[13px] font-medium transition-colors",
-              v.kind === k.value ? "border-fg/20 bg-fg text-bg" : "border-line text-muted hover:text-fg",
-            )}
-          >
-            {(() => {
-              const Icon = KIND_ICONS[k.value];
-              return Icon ? <Icon className="mr-1 inline h-3.5 w-3.5 align-[-2px]" /> : null;
-            })()}
-            {k.full}
-          </button>
-        ))}
+        {TASK_KINDS.map((k) => {
+          const Icon = KIND_ICONS[k.value];
+          return (
+            <button
+              key={k.value}
+              type="button"
+              role="radio"
+              aria-checked={v.kind === k.value}
+              onClick={() => {
+                set({ kind: k.value });
+                // Шаблон этапов подставляем, пока пользователь сам их не трогал
+                if (!id && !stagesTouched) setStages((KIND_STAGES[k.value] ?? []).map((title) => ({ title, dueDate: "" })));
+              }}
+              className={kindChip(v.kind === k.value)}
+            >
+              {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+              {k.full}
+            </button>
+          );
+        })}
       </div>
-      <Textarea rows={2} value={v.description} onChange={(e) => set({ description: e.target.value })} placeholder="Детали (необязательно)" aria-label="Описание" />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3">
         <Field label="Предмет">
           <Select value={v.subjectId} onChange={(e) => set({ subjectId: e.target.value, questionId: "" })}>
             <option value="">Без предмета</option>
@@ -117,31 +127,23 @@ export function TaskForm({
             ))}
           </Select>
         </Field>
-        <Field label="Приоритет">
-          <Select value={v.priority} onChange={(e) => set({ priority: e.target.value })}>
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
         <Field label="Срок">
           <Input type="date" value={v.dueDate} onChange={(e) => set({ dueDate: e.target.value })} />
         </Field>
-        <Field label="Время">
-          <Input type="time" value={v.dueTime} onChange={(e) => set({ dueTime: e.target.value })} />
-        </Field>
       </div>
 
+      <Field label="Номера / детали">
+        <Textarea rows={2} value={v.description} onChange={(e) => set({ description: e.target.value })} placeholder="Например: № 769, 770, 920 — или что сдать" />
+      </Field>
+
       {!id ? (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-medium">Этапы</span>
-            <span className="text-xs text-muted">даты — по желанию, можно поставить потом</span>
+            <span className="text-[13px] text-[#424655] dark:text-fg/80">Этапы</span>
+            <span className="text-xs text-muted">даты — по желанию</span>
           </div>
           {stages.length ? (
-            <ol className="space-y-1.5">
+            <ol className="flex flex-col gap-1.5">
               {stages.map((st, i) => (
                 <li key={i} className="flex items-center gap-1.5">
                   <span className="w-4 shrink-0 text-right text-xs tabular-nums text-muted">{i + 1}</span>
@@ -151,7 +153,7 @@ export function TaskForm({
                       setStagesTouched(true);
                       setStages((list) => list.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)));
                     }}
-                    className="h-8 flex-1 text-[13px]"
+                    className="h-9 flex-1 text-[13px]"
                     aria-label={`Этап ${i + 1}`}
                   />
                   <Input
@@ -162,7 +164,7 @@ export function TaskForm({
                       setStagesTouched(true);
                       setStages((list) => list.map((x, j) => (j === i ? { ...x, dueDate: e.target.value } : x)));
                     }}
-                    className="h-8 w-[8.5rem] shrink-0 px-2 text-[13px]"
+                    className="h-9 w-[8.5rem] shrink-0 px-2 text-[13px]"
                     aria-label={`Дата этапа ${i + 1}`}
                   />
                   <button
@@ -171,7 +173,7 @@ export function TaskForm({
                       setStagesTouched(true);
                       setStages((list) => list.filter((_, j) => j !== i));
                     }}
-                    className="grid h-8 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-subtle hover:text-danger"
+                    className="grid h-9 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-subtle hover:text-danger"
                     aria-label="Убрать этап"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -182,57 +184,77 @@ export function TaskForm({
           ) : null}
           <button
             type="button"
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-accent hover:underline"
+            className="h-8 self-start rounded-lg border border-dashed border-[#CFC9B8] px-2.5 text-[13px] text-[#234AB0] transition-colors hover:border-accent dark:border-line dark:text-accent"
             onClick={() => {
               setStagesTouched(true);
               setStages((list) => [...list, { title: "", dueDate: "" }]);
             }}
           >
-            <Plus className="h-3.5 w-3.5" /> Этап
+            + Этап
           </button>
         </div>
       ) : null}
 
-      <button type="button" className="flex items-center gap-1 text-[13px] font-medium text-muted hover:text-fg" onClick={() => setMore((m) => !m)}>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !more && "-rotate-90")} /> Дополнительно
-      </button>
-      {more ? (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Статус">
-              <Select value={v.status} onChange={(e) => set({ status: e.target.value })}>
-                {TASK_STATUSES.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Начало">
-              <Input type="date" value={v.startDate} onChange={(e) => set({ startDate: e.target.value })} />
+      <div>
+        <button
+          type="button"
+          aria-expanded={more}
+          className="flex min-h-7 items-center gap-1 text-[13px] text-[#424655] hover:text-fg dark:text-fg/80"
+          onClick={() => setMore((m) => !m)}
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !more && "-rotate-90")} /> Ещё: время, приоритет{id ? ", статус" : ""}
+        </button>
+        {more ? (
+          <div className="mt-2.5 flex flex-col gap-3">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-3">
+              <Field label="Время">
+                <Input type="time" value={v.dueTime} onChange={(e) => set({ dueTime: e.target.value })} />
+              </Field>
+              <Field label="Приоритет">
+                <Select value={v.priority} onChange={(e) => set({ priority: e.target.value })}>
+                  {TASK_PRIORITIES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Статус">
+                <Select value={v.status} onChange={(e) => set({ status: e.target.value })}>
+                  {TASK_STATUSES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Начало">
+                <Input type="date" value={v.startDate} onChange={(e) => set({ startDate: e.target.value })} />
+              </Field>
+            </div>
+            {relevantQuestions.length ? (
+              <Field label="Связанный вопрос">
+                <Select value={v.questionId} onChange={(e) => set({ questionId: e.target.value })}>
+                  <option value="">Без вопроса</option>
+                  {relevantQuestions.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.text.length > 80 ? `${q.text.slice(0, 80)}…` : q.text}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
+            <Field label="Теги" hint="Через запятую">
+              <Input value={v.tags} onChange={(e) => set({ tags: e.target.value })} placeholder="сессия, деканат" />
             </Field>
           </div>
-          {relevantQuestions.length ? (
-            <Field label="Связанный вопрос">
-              <Select value={v.questionId} onChange={(e) => set({ questionId: e.target.value })}>
-                <option value="">Без вопроса</option>
-                {relevantQuestions.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.text.length > 80 ? `${q.text.slice(0, 80)}…` : q.text}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : null}
-          <Field label="Теги" hint="Через запятую">
-            <Input value={v.tags} onChange={(e) => set({ tags: e.target.value })} placeholder="сессия, деканат" />
-          </Field>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      <Button type="submit" loading={busy} className="w-full">
+      <Button type="submit" loading={busy} className="h-[46px] w-full rounded-[11px] text-[15px]">
         {id ? "Сохранить" : "Создать задачу"}
       </Button>
+      {!id ? <p className="text-center text-xs text-muted">Быстрее — написать ассистенту: «дз матан на 12.11 769, 770»</p> : null}
     </form>
   );
 }

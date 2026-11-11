@@ -1,326 +1,212 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, BookOpen, Brain, CalendarClock, CheckCircle2, GraduationCap, Pin, Timer } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getDashboard } from "@/lib/queries";
-import { daysUntil, formatDate, formatRelative } from "@/lib/utils";
-import { ProgressBar } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty";
-import { QuickCreate } from "@/components/dashboard/quick-create";
-import { Section } from "@/components/ui/page";
-import { ActivityHeatmap } from "@/components/dashboard/activity";
-import { TodayLessons } from "@/components/dashboard/today-lessons";
+import { buildWeekGroups, inDays, subjectShort, todayLine } from "@/lib/home";
+import { daysUntil, formatDate } from "@/lib/utils";
 import { kindMeta } from "@/lib/schedule";
-import { KindChip } from "@/components/tasks/kind-chip";
+import { SUBJECT_TYPES } from "@/lib/constants";
+import { taskKind } from "@/lib/task-kinds";
+import { EmptyState } from "@/components/ui/empty";
+import { TodayLessons } from "@/components/dashboard/today-lessons";
+import { FocusBar, FocusProvider } from "@/components/dashboard/focus";
+import { WeekTasks, type WeekGroup } from "@/components/dashboard/week-tasks";
+import { QuickAddBar } from "@/components/tasks/quick-add";
 
-function greeting() {
-  const h = Number(new Intl.DateTimeFormat("ru-RU", { hour: "numeric", timeZone: "Europe/Moscow" }).format(new Date()));
+/** Сколько задач видно сразу; остальные — по «Показать ещё» */
+const WEEK_LIMIT = 12;
+
+function greeting(now: Date) {
+  const h = Number(new Intl.DateTimeFormat("ru-RU", { hour: "numeric", hourCycle: "h23", timeZone: "Europe/Moscow" }).format(now));
   if (h < 6) return "Доброй ночи";
   if (h < 12) return "Доброе утро";
   if (h < 18) return "Добрый день";
   return "Добрый вечер";
 }
 
-function examLabel(d: number | null) {
-  if (d === null) return "без даты";
-  if (d < 0) return "дата прошла";
-  if (d === 0) return "сегодня";
-  if (d === 1) return "завтра";
-  return `через ${d} дн.`;
+/** Подпись под предметом: ближайший срок, иначе экзамен или тип отчётности */
+function nextLabel(s: { next: { kind: string; title: string; dueDate: Date | null } | null; examDate: Date | null; type: string }) {
+  if (s.next?.dueDate) {
+    const d = daysUntil(s.next.dueDate) ?? 99;
+    const what = s.next.kind === "TASK" ? s.next.title : taskKind(s.next.kind).label;
+    const when = d <= 0 ? "сегодня" : d === 1 ? "завтра" : formatDate(s.next.dueDate, "d MMMM");
+    return { text: `${what} — ${when}`, urgent: d <= 1 };
+  }
+  if (s.examDate && (daysUntil(s.examDate) ?? -1) >= 0) return { text: `экзамен ${formatDate(s.examDate, "d MMMM")}`, urgent: false };
+  const type = SUBJECT_TYPES.find((t) => t.value === s.type);
+  return { text: type && s.type !== "OTHER" ? type.label.toLowerCase() : "без сроков", urgent: false };
 }
 
 export default async function DashboardPage() {
   const user = await requireUser();
   const data = await getDashboard(user.id);
+  const now = new Date();
   const firstName = user.name.split(" ")[0];
-  const nextExam = data.exams[0];
-  const nextExamDays = nextExam ? daysUntil(nextExam.examDate) : null;
-  const focusCount = data.todayTasks.length + data.overdue.length;
+
+  const weekGroups: WeekGroup[] = buildWeekGroups(data.openTasks, now).map((g) => ({
+    ...g,
+    items: g.items.map((t) => {
+      const doneSteps = t.subtasks.filter((x) => x.status === "DONE").length;
+      return {
+        id: t.id,
+        title: t.title,
+        kind: t.kind,
+        subject: t.subject?.name ?? null,
+        steps: t.subtasks.length ? { done: doneSteps, total: t.subtasks.length } : null,
+      };
+    }),
+  }));
+  const weekCount = weekGroups.reduce((n, g) => n + g.items.length, 0);
+
+  const exams = data.subjects
+    .filter((s) => s.examDate && (daysUntil(s.examDate) ?? -1) >= 0)
+    .sort((a, b) => (a.examDate?.getTime() ?? 0) - (b.examDate?.getTime() ?? 0));
+  const firstExamDays = exams.length ? daysUntil(exams[0].examDate) : null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm capitalize text-muted">{formatDate(new Date(), "EEEE, d MMMM")}</p>
-          <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">
-            {greeting()}, {firstName}
-          </h1>
+    <FocusProvider>
+      <div className="flex min-h-[calc(100dvh-10rem)] flex-col gap-[22px]">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1.5">
+            <p className="text-sm text-muted">{todayLine(now)}</p>
+            <h1 className="heading text-[28px] leading-tight sm:text-[34px]">
+              {greeting(now)}, {firstName}
+            </h1>
+          </div>
+          <QuickAddBar subjects={data.subjects.map((s) => ({ id: s.id, name: s.name }))} />
         </div>
-        <QuickCreate subjects={data.subjects.map((s) => ({ id: s.id, name: s.name }))} />
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          icon={GraduationCap}
-          label="Выучено вопросов"
-          value={data.learnedQuestions}
-          total={data.totalQuestions}
-          progress={data.totalQuestions ? (data.learnedQuestions / data.totalQuestions) * 100 : 0}
-        />
-        <Stat
-          icon={CheckCircle2}
-          label="Задач закрыто"
-          value={data.doneTasks}
-          total={data.totalTasks}
-          progress={data.totalTasks ? (data.doneTasks / data.totalTasks) * 100 : 0}
-        />
-        <Link href="/review" className="card card-hover p-4">
-          <div className="flex items-center gap-2 text-[13px] text-muted">
-            <Brain className="h-4 w-4" /> К повторению
-          </div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className={`text-2xl font-semibold tabular-nums tracking-tight ${data.dueCount ? "text-accent" : ""}`}>{data.dueCount}</span>
-            <span className="text-sm text-muted">{data.newCount ? `+ ${data.newCount} новых` : "сегодня"}</span>
-          </div>
-          <div className="mt-1 text-xs font-medium text-accent">{data.dueCount || data.newCount ? "Начать →" : "всё повторено"}</div>
-        </Link>
-        {nextExam ? (
-          <Link href={`/subjects/${nextExam.id}`} className="card card-hover p-4">
-            <div className="flex items-center gap-2 text-[13px] text-muted">
-              <CalendarClock className="h-4 w-4" /> Ближайший экзамен
+        <div className="flex flex-wrap items-start gap-[22px]">
+          <section aria-labelledby="week-title" className="card min-w-0 flex-[3_1_560px] overflow-hidden rounded-[14px]">
+            <div className="flex items-baseline justify-between gap-3 px-4 pb-3 pt-4 sm:px-5">
+              <h2 id="week-title" className="heading text-[22px]">
+                На этой неделе
+              </h2>
+              <span className="text-[13px] text-muted">
+                {weekCount} открыт{weekCount % 10 === 1 && weekCount % 100 !== 11 ? "ая" : "ых"} · {data.doneThisWeek} сделано
+              </span>
             </div>
-            <div className="mt-2 text-2xl font-semibold tracking-tight">{examLabel(nextExamDays)}</div>
-            <div className="mt-1 truncate text-xs text-muted">
-              {nextExam.emoji} {nextExam.name}
-            </div>
-          </Link>
-        ) : (
-          <Stat icon={CalendarClock} label="Ближайший экзамен" value="—" hint="даты не указаны" />
-        )}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <Section
-          title={
-            <span className="flex items-center gap-2">
-              Фокус на сегодня
-              {focusCount ? <span className="rounded-full bg-subtle px-1.5 text-xs font-medium text-muted">{focusCount}</span> : null}
-            </span>
-          }
-          action={
-            <Link href="/tasks" className="text-xs font-medium text-muted hover:text-fg">
-              Все задачи
-            </Link>
-          }
-          bodyClassName="p-1.5"
-        >
-          {focusCount === 0 ? (
-            <div className="flex items-center gap-3 px-3 py-5 text-sm text-muted">
-              <CheckCircle2 className="h-5 w-5 text-success" />
-              На сегодня всё чисто. Хорошее время повторить вопросы.
-            </div>
-          ) : (
-            <ul>
-              {data.overdue.map((t) => (
-                <TaskRow key={t.id} task={t} overdue />
-              ))}
-              {data.todayTasks.map((t) => (
-                <TaskRow key={t.id} task={t} />
-              ))}
-            </ul>
-          )}
-          {data.upcoming.length ? (
-            <>
-              <div className="label-xs px-3 pb-1 pt-4">Дальше</div>
-              <ul>
-                {data.upcoming.map((t) => (
-                  <TaskRow key={t.id} task={t} showDate />
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </Section>
-
-        <div className="space-y-4">
-          {data.todayEvents.length ? (
-            <Section title="Сегодня по расписанию" bodyClassName="p-1.5">
-              <TodayLessons
-                lessons={data.todayEvents.map((e) => ({
-                  key: e.key,
-                  title: e.title,
-                  kind: e.kind,
-                  start: e.start.toISOString(),
-                  allDay: e.allDay,
-                  location: e.location,
-                  color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
-                  subjectId: e.subjectId,
-                }))}
-                homework={data.homework}
-              />
-            </Section>
-          ) : null}
-          <Section title="Экзамены" bodyClassName="p-1.5">
-            {data.exams.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-muted">Добавь дату экзамена в карточке предмета — здесь появится обратный отсчёт.</p>
+            {weekGroups.length ? (
+              <WeekTasks groups={weekGroups} limit={WEEK_LIMIT} />
             ) : (
-              <ul>
-                {data.exams.map((s) => {
-                  const d = daysUntil(s.examDate);
-                  return (
-                    <li key={s.id} className="flex items-center gap-1">
-                      <Link href={`/subjects/${s.id}`} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
-                        <span className="text-lg">{s.emoji}</span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">{s.name}</span>
-                          <span className="block text-xs text-muted">{formatDate(s.examDate, "d MMMM")}</span>
-                        </span>
-                        <span className={`text-xs font-medium ${d !== null && d <= 3 ? "text-danger" : "text-muted"}`}>{examLabel(d)}</span>
-                      </Link>
-                      <Link href={`/subjects/${s.id}/ten`} className="flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-xs font-medium text-accent transition-colors hover:bg-accent/10" title="10 минут: самые слабые вопросы по этому экзамену">
-                        <Timer className="h-4 w-4" /> 10 мин
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Section>
-
-          {data.recentTopics.length ? (
-            <Section
-              title="Изучаю"
-              action={
-                <Link href="/learn" className="text-xs font-medium text-muted hover:text-fg">
-                  Все
+              <div className="border-t border-line px-5 py-8 text-center text-sm text-muted">
+                На неделю дел нет. Хорошее время повторить вопросы.{" "}
+                <Link href="/review" className="text-accent hover:underline">
+                  К повторению →
                 </Link>
-              }
-              bodyClassName="p-1.5"
-            >
-              <ul>
-                {data.recentTopics.map((t) => (
-                  <li key={t.id}>
-                    <Link href={`/lectures/${t.id}`} className="flex gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
-                      <span className="text-base leading-6">{t.subject.emoji}</span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{t.title}</span>
-                        <span className="block truncate text-xs text-muted">
-                          {t.subject.name} · {formatRelative(t.updatedAt)}
-                        </span>
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
+              </div>
+            )}
+          </section>
 
-          {data.notes.length ? (
-            <Section
-              title={
-                <span className="flex items-center gap-1.5">
-                  <Pin className="h-3.5 w-3.5" /> Закреплённые заметки
-                </span>
-              }
-              bodyClassName="p-1.5"
-            >
-              <ul>
-                {data.notes.map((n) => (
-                  <li key={n.id}>
-                    <Link href={`/notes?open=${n.id}`} className="flex gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
-                      <span className="mt-1 h-3 w-1 shrink-0 rounded-full" style={{ background: n.color }} />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{n.title}</span>
-                        {n.content ? <span className="block truncate text-xs text-muted">{n.content.slice(0, 120)}</span> : null}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
-        </div>
-      </div>
+          <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-[22px]">
+            <section aria-labelledby="session-title" className="card rounded-[14px] px-4 py-4 sm:px-5">
+              <div className="flex items-baseline justify-between gap-2 pb-2">
+                <h2 id="session-title" className="heading text-xl">
+                  Сессия
+                </h2>
+                {firstExamDays !== null ? <span className="text-[13px] font-semibold text-urgent">{inDays(firstExamDays)}</span> : null}
+              </div>
+              {exams.length === 0 ? (
+                <p className="border-t border-[#ECE8DF] pt-3 text-sm text-muted dark:border-line">Добавь дату экзамена в карточке предмета — здесь появится обратный отсчёт.</p>
+              ) : (
+                <ul>
+                  {exams.slice(0, 6).map((e) => {
+                    const share = e.questionsTotal ? Math.round((e.questionsLearned / e.questionsTotal) * 100) : 0;
+                    return (
+                      <li key={e.id} className="flex flex-col gap-2 border-t border-[#ECE8DF] py-3 dark:border-line">
+                        <div className="flex justify-between gap-3">
+                          <Link href={`/subjects/${e.id}`} className="min-w-0 truncate text-sm font-medium hover:text-accent">
+                            {e.name}
+                          </Link>
+                          <span className="heading shrink-0 text-sm">{formatDate(e.examDate, "d MMM").replace(".", "")}</span>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="h-[5px] flex-1 overflow-hidden rounded-full bg-[#E7E3DA] dark:bg-subtle"
+                            role="progressbar"
+                            aria-label={`Выучено: ${e.name}`}
+                            aria-valuenow={share}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                          >
+                            <div className="h-full rounded-full bg-accent" style={{ width: `${share}%` }} />
+                          </div>
+                          <span className="shrink-0 text-xs tabular-nums text-muted">{e.questionsTotal ? `${e.questionsLearned} / ${e.questionsTotal}` : "нет вопросов"}</span>
+                          {e.questionsTotal ? (
+                            <Link
+                              href={`/subjects/${e.id}/ten`}
+                              className="inline-flex h-[30px] shrink-0 items-center rounded-lg border border-line bg-surface px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-subtle"
+                              title="10 минут: самые слабые вопросы к этому экзамену"
+                            >
+                              10 мин
+                            </Link>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
 
-      <ActivityHeatmap activity={data.activity} />
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Предметы</h2>
-          <Link href="/subjects" className="flex items-center gap-1 text-sm text-muted hover:text-fg">
-            Все <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        {data.subjects.length === 0 ? (
-          <EmptyState icon={BookOpen} title="Пока нет предметов" hint="Добавь первый — вокруг него появятся вопросы, задачи и заметки." />
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {data.subjects.map((s) => (
-              <Link key={s.id} href={`/subjects/${s.id}`} className="card card-hover p-4">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl text-lg" style={{ background: `${s.color}1a` }}>
-                    {s.emoji}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{s.name}</span>
-                    <span className="block text-xs text-muted">
-                      {s.questionsTotal ? `осталось ${s.questionsLeft} из ${s.questionsTotal} вопросов` : "вопросов пока нет"}
-                    </span>
-                  </span>
-                  <span className="text-sm font-semibold tabular-nums">{s.progress}%</span>
-                </div>
-                <ProgressBar value={s.progress} color={s.color} className="mt-3" />
-              </Link>
-            ))}
+            {data.todayEvents.length ? (
+              <section aria-labelledby="today-title" className="card rounded-[14px] p-1.5">
+                <h2 id="today-title" className="heading px-3 pb-1 pt-2.5 text-base">
+                  Сегодня по расписанию
+                </h2>
+                <TodayLessons
+                  lessons={data.todayEvents.map((e) => ({
+                    key: e.key,
+                    title: e.title,
+                    kind: e.kind,
+                    start: e.start.toISOString(),
+                    allDay: e.allDay,
+                    location: e.location,
+                    color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
+                    subjectId: e.subjectId,
+                  }))}
+                  homework={data.homework}
+                />
+              </section>
+            ) : null}
           </div>
-        )}
-      </section>
-    </div>
-  );
-}
+        </div>
 
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  total,
-  hint,
-  progress,
-}: {
-  icon: typeof BookOpen;
-  label: string;
-  value: number | string;
-  total?: number;
-  hint?: string;
-  progress?: number;
-}) {
-  return (
-    <div className="card p-4">
-      <div className="flex items-center gap-2 text-[13px] text-muted">
-        <Icon className="h-4 w-4" /> {label}
-      </div>
-      <div className="mt-2 flex items-baseline gap-1">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">{value}</span>
-        {total !== undefined ? <span className="text-sm text-muted">/ {total}</span> : null}
-        {hint ? <span className="text-sm text-muted">{hint}</span> : null}
-      </div>
-      {progress !== undefined ? <ProgressBar value={progress} className="mt-2.5" /> : null}
-    </div>
-  );
-}
+        <section aria-labelledby="subjects-title" className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between">
+            <h2 id="subjects-title" className="heading text-[22px]">
+              Предметы
+            </h2>
+            <Link href="/subjects" className="text-[13px] text-accent hover:underline">
+              Все →
+            </Link>
+          </div>
+          {data.subjects.length === 0 ? (
+            <EmptyState icon={BookOpen} title="Пока нет предметов" hint="Добавь первый — вокруг него появятся вопросы, задачи и заметки." />
+          ) : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(250px,100%),1fr))] gap-2.5">
+              {data.subjects.map((s) => {
+                const next = nextLabel(s);
+                return (
+                  <Link key={s.id} href={`/subjects/${s.id}`} className="card card-hover flex items-center gap-3 rounded-xl px-3.5 py-3">
+                    <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg text-xs font-bold" style={{ background: `${s.color}1f`, color: s.color }} aria-hidden>
+                      {subjectShort(s.name)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{s.name}</span>
+                      <span className={`block truncate text-xs ${next.urgent ? "text-urgent" : "text-muted"}`}>{next.text}</span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-function TaskRow({
-  task,
-  overdue,
-  showDate,
-}: {
-  task: { id: string; title: string; dueDate: Date | null; dueTime: string | null; kind?: string; subject: { name: string; color: string } | null };
-  overdue?: boolean;
-  showDate?: boolean;
-}) {
-  return (
-    <li>
-      <Link href={`/tasks/${task.id}`} className="flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-subtle">
-        {overdue ? (
-          <AlertTriangle className="h-4 w-4 shrink-0 text-danger" />
-        ) : (
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: task.subject?.color ?? "rgb(var(--muted))" }} />
-        )}
-        <KindChip kind={task.kind} />
-        <span className="min-w-0 flex-1 truncate text-sm">{task.title}</span>
-        {task.subject ? <span className="hidden truncate text-xs text-muted sm:block sm:max-w-[10rem]">{task.subject.name}</span> : null}
-        <span className={`shrink-0 text-xs tabular-nums ${overdue ? "font-medium text-danger" : "text-muted"}`}>
-          {overdue ? formatDate(task.dueDate, "d MMM") : showDate ? formatDate(task.dueDate, "d MMM") : task.dueTime ?? "сегодня"}
-        </span>
-      </Link>
-    </li>
+        <div className="mt-auto pt-2">
+          <FocusBar />
+        </div>
+      </div>
+    </FocusProvider>
   );
 }

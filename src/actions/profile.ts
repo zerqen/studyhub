@@ -29,6 +29,14 @@ export async function changePassword(input: unknown): Promise<ActionResult> {
   });
 }
 
+/** Отметить прочитанными: одно уведомление, несколько (одна задача — несколько напоминаний) или все */
+export async function markNotificationRead(ids: string[]): Promise<ActionResult> {
+  return withUser(async (userId) => {
+    if (!ids.length) return;
+    await prisma.notification.updateMany({ where: { userId, id: { in: ids.slice(0, 100) } }, data: { read: true } });
+  });
+}
+
 export async function markNotificationsRead(): Promise<ActionResult> {
   return withUser(async (userId) => {
     // Без перерисовки всего приложения: колокольчик обновляется локально
