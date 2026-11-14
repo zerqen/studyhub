@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: StudyHub
+  version: 1.0.0
+  description: Search private StudyHub materials, list files and comments, and upload conversation files for the account linked to the action credential.
+servers:
+  - url: https://studyhub-lime.vercel.app
+security:
+  - StudyHubBearer: []
+paths:
+  /api/gpt/search:
+    get:
+      operationId: searchStudyHub
+      summary: Search StudyHub materials by text or lab number
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: labNumber
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 9999 }
+        - name: subject
+          in: query
+          description: Subject name or stem used with labNumber.
+          schema: { type: string, minLength: 1, maxLength: 120 }
+      responses:
+        "200":
+          description: Matching materials with types, IDs and links
+  /api/gpt/attachments:
+    get:
+      operationId: listStudyHubAttachments
+      summary: List files directly attached to a StudyHub material
+      parameters:
+        - name: parentType
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/ParentType" }
+        - $ref: "#/components/parameters/ParentId"
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+      responses:
+        "200":
+          description: Attachments and next offset, when available
+    post:
+      operationId: attachStudyHubConversationFile
+      summary: Upload a conversation file to a StudyHub material
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentType, parentId, openaiFileIdRefs]
+              properties:
+                parentType: { $ref: "#/components/schemas/ParentType" }
+                parentId: { $ref: "#/components/schemas/Identifier" }
+                openaiFileIdRefs: { $ref: "#/components/schemas/ConversationFile" }
+      responses:
+        "201":
+          description: Created attachment with its StudyHub link
+  /api/gpt/file:
+    get:
+      operationId: getStudyHubFileLink
+      summary: Get metadata and the sign-in link for a StudyHub file
+      parameters:
+        - name: fileId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/Identifier" }
+      responses:
+        "200":
+          description: File metadata and StudyHub link
+  /api/gpt/comments:
+    get:
+      operationId: listStudyHubComments
+      summary: List recent comments and their files on a task or question
+      parameters:
+        - name: parentType
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/CommentParentType" }
+        - $ref: "#/components/parameters/ParentId"
+      responses:
+        "200":
+          description: Recent comments with attached files and links
+    post:
+      operationId: addStudyHubComment
+      summary: Add a text-only comment to a task or question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentType, parentId, content]
+              properties:
+                parentType: { $ref: "#/components/schemas/CommentParentType" }
+                parentId: { $ref: "#/components/schemas/Identifier" }
+                content: { $ref: "#/components/schemas/CommentText" }
+      responses:
+        "201":
+          description: Created comment
+  /api/gpt/comment-with-file:
+    post:
+      operationId: addStudyHubCommentWithFile
+      summary: Put a conversation file in a new comment to a StudyHub task or question
+      description: Use this operation when the user requests a new comment with an attachment. Send the actual file from the chat together with the exact comment text in the same call.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentType, parentId, content, openaiFileIdRefs]
+              properties:
+                parentType: { $ref: "#/components/schemas/CommentParentType" }
+                parentId: { $ref: "#/components/schemas/Identifier" }
+                content: { $ref: "#/components/schemas/CommentText" }
+                openaiFileIdRefs: { $ref: "#/components/schemas/ConversationFile" }
+      responses:
+        "201":
+          description: New comment with the attachment and its StudyHub link
+components:
+  securitySchemes:
+    StudyHubBearer:
+      type: http
+      scheme: bearer
+  parameters:
+    ParentId:
+      name: parentId
+      in: query
+      required: true
+      schema: { $ref: "#/components/schemas/Identifier" }
+  schemas:
+    Identifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: "^[A-Za-z0-9_-]+$"
+    ParentType:
+      type: string
+      enum: [subject, task, subtask, ticket, question, note, lecture]
+    CommentParentType:
+      type: string
+      enum: [task, question]
+    CommentText:
+      type: string
+      minLength: 1
+      maxLength: 2000
+      description: The exact comment text requested by the user.
+    ConversationFile:
+      type: array
+      description: The single actual file attached to or generated in this conversation. Pass its ChatGPT file ID so the platform can include the temporary download link.
+      minItems: 1
+      maxItems: 1
+      items:
+        type: string

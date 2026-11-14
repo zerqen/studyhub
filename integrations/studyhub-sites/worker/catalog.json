@@ -1,0 +1,339 @@
+[
+  {
+    "name": "search_materials",
+    "description": "Search the owner's StudyHub materials. For a lab by number, use labNumber and a subject name or stem (e.g. 8 and Физик). Otherwise use query for text search.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "labNumber": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9999
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_attachments",
+    "description": "List the owner's attachments on the selected material. Use the type and id from search_materials. Returns up to 100 files per call.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "parentType": {
+          "type": "string",
+          "enum": [
+            "subject",
+            "task",
+            "subtask",
+            "ticket",
+            "question",
+            "note",
+            "lecture"
+          ]
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "default": 0
+        }
+      },
+      "required": [
+        "parentType",
+        "parentId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "open_file",
+    "description": "Return the owner's file metadata and an authenticated StudyHub link. Open the link in a signed-in browser or use scripts/studyhub-client.ts open to download the bytes locally.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "fileId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "attach_chat_file",
+    "description": "Attach a file supplied in this conversation directly to a StudyHub material. Pass the actual file from the chat. For a new comment with an attachment, use add_comment_with_file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "parentType": {
+          "type": "string",
+          "enum": [
+            "subject",
+            "task",
+            "subtask",
+            "ticket",
+            "question",
+            "note",
+            "lecture"
+          ]
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "file": {
+          "type": "object",
+          "properties": {
+            "file_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "download_url": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 8192
+            },
+            "mime_type": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "file_name": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "file_id",
+            "download_url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "parentType",
+        "parentId",
+        "file"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "openai/fileParams": [
+        "file"
+      ]
+    }
+  },
+  {
+    "name": "list_comments",
+    "description": "Read recent StudyHub comments and their attachments on a task or question.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "parentType": {
+          "type": "string",
+          "enum": [
+            "task",
+            "question"
+          ]
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "parentType",
+        "parentId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "add_comment",
+    "description": "Create a text comment on a StudyHub task or question. For a comment with a file, use add_comment_with_file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "parentType": {
+          "type": "string",
+          "enum": [
+            "task",
+            "question"
+          ]
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "parentType",
+        "parentId",
+        "content"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "add_comment_with_file",
+    "description": "Create one StudyHub comment with the user's text and the actual conversation file attached to that new comment.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "parentType": {
+          "type": "string",
+          "enum": [
+            "task",
+            "question"
+          ]
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "file": {
+          "type": "object",
+          "properties": {
+            "file_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "download_url": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 8192
+            },
+            "mime_type": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "file_name": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "file_id",
+            "download_url"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "parentType",
+        "parentId",
+        "content",
+        "file"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "openai/fileParams": [
+        "file"
+      ]
+    }
+  }
+]

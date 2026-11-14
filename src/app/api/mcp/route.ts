@@ -1,5 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { mcpUnauthorized, mcpUserId } from "@/lib/mcp-auth";
+import { gptUserId, mcpUnauthorized, mcpUserId } from "@/lib/mcp-auth";
 import { studyHubMcp } from "@/lib/mcp-tools";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ async function handleMcp(request: Request) {
   const caller = request.headers.get("origin");
   if (caller && caller !== origin) return new Response("Forbidden origin", { status: 403 });
 
-  const userId = await mcpUserId(request);
+  const userId = await mcpUserId(request) ?? await gptUserId(request);
   if (!userId) return mcpUnauthorized();
 
   const server = studyHubMcp(userId, origin);
@@ -34,6 +34,6 @@ export const POST = handleMcp;
 export async function GET(request: Request) {
   const caller = request.headers.get("origin");
   if (caller && caller !== new URL(request.url).origin) return new Response("Forbidden origin", { status: 403 });
-  if (!(await mcpUserId(request))) return mcpUnauthorized();
+  if (!(await mcpUserId(request) ?? await gptUserId(request))) return mcpUnauthorized();
   return new Response(null, { status: 405, headers: { Allow: "POST", "Cache-Control": "no-store" } });
 }
