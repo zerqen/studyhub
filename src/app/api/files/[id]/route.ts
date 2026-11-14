@@ -2,21 +2,32 @@ import { NextResponse } from "next/server";
 import { activeUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isPrivateBlob, isRemoteStoragePath, openStored } from "@/lib/files";
+import { mcpUnauthorized, mcpUserId } from "@/lib/mcp-auth";
+import { assertParentOwned, UploadParentNotFound } from "@/lib/upload-parent";
 
 /** Типы, которые браузер исполняет как документ со скриптами */
 const ACTIVE_TYPES = /svg|html|xml|javascript/i;
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const userId = await activeUserId();
-  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+  const bearer = req.headers.has("authorization");
+  const userId = bearer ? await mcpUserId(req) : await activeUserId();
+  if (!userId) return bearer ? mcpUnauthorized() : new NextResponse("Unauthorized", { status: 401 });
   const { id } = await ctx.params;
-  const file = await prisma.attachment.findFirst({ where: { id, userId }, select: { storagePath: true, originalName: true, mimeType: true } });
+  const file = await prisma.attachment.findFirst({ where: { id, userId } });
   if (!file) return new NextResponse("Not found", { status: 404 });
+  if (bearer) {
+    try {
+      await assertParentOwned(userId, file);
+    } catch (error) {
+      if (!(error instanceof UploadParentNotFound)) throw error;
+      return new NextResponse("Not found", { status: 404 });
+    }
+  }
   const download = new URL(req.url).searchParams.get("download") === "1";
   const disposition = `${download ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`;
 
   // Публичный Blob: просмотр — прямо с CDN (быстрее, и аудио/видео перематывается через Range-запросы)
-  if (isRemoteStoragePath(file.storagePath) && !isPrivateBlob(file.storagePath) && !download) {
+  if (!bearer && isRemoteStoragePath(file.storagePath) && !isPrivateBlob(file.storagePath) && !download) {
     return NextResponse.redirect(new URL(file.storagePath), { status: 302, headers: { "Cache-Control": "private, max-age=86400" } });
   }
 
@@ -34,7 +45,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       // SVG/HTML/XML могут содержать скрипты: открываем их в «песочнице» без доступа к сайту и входу
       ...(ACTIVE_TYPES.test(file.mimeType) ? { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'" } : {}),
       // Содержимое файла с этим id не меняется: повторно картинки берутся из кэша, без запроса к базе
-      "Cache-Control": "private, max-age=604800, immutable",
+      "Cache-Control": bearer ? "private, no-store" : "private, max-age=604800, immutable",
       ...(stored.size ? { "Content-Length": String(stored.size) } : {}),
     },
   });

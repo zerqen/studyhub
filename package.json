@@ -29,6 +29,7 @@
     "@codemirror/view": "^6.43.15",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/client": "^6.16.2",
     "@vercel/blob": "^2.8.1",
     "bcryptjs": "^2.4.3",

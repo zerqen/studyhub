@@ -3,6 +3,8 @@ import { prisma } from "./prisma";
 export const PARENT_KEYS = ["subjectId", "taskId", "subtaskId", "ticketId", "questionId", "noteId", "commentId", "lectureId", "examItemId"] as const;
 export type UploadParent = Partial<Record<(typeof PARENT_KEYS)[number], string | null>>;
 
+export class UploadParentNotFound extends Error {}
+
 export function parentFrom(get: (key: string) => unknown): UploadParent {
   const out: UploadParent = {};
   for (const key of PARENT_KEYS) {
@@ -26,5 +28,5 @@ export async function assertParentOwned(userId: string, p: UploadParent) {
     p.lectureId ? prisma.lecture.findFirst(where(p.lectureId)) : true,
     p.examItemId ? prisma.examItem.findFirst({ where: { id: p.examItemId, exam: { userId } }, select: { id: true } }) : true,
   ]);
-  if (checks.some((c) => !c)) throw new Error("Объект для файла не найден");
+  if (checks.some((c) => !c)) throw new UploadParentNotFound("Объект для файла не найден");
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { activeUserId } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
+import { createAttachment } from "@/lib/attachments";
 import { ALLOWED_MIME, MAX_DIRECT_FILE_SIZE, guessMime } from "@/lib/constants";
 import { assertParentOwned, parentFrom } from "@/lib/upload-parent";
 
@@ -19,16 +19,12 @@ export async function POST(req: Request) {
     const parent = parentFrom((k) => body.parent?.[k]);
     await assertParentOwned(userId, parent);
     const name = String(body.name ?? "file").slice(0, 180);
-    const row = await prisma.attachment.create({
-      data: {
-        userId: userId,
-        filename: String(body.pathname ?? name).split("/").pop()!.slice(0, 200),
-        originalName: name,
-        mimeType,
-        size,
-        storagePath: url.toString(),
-        ...parent,
-      },
+    const row = await createAttachment(userId, parent, {
+      filename: String(body.pathname ?? name).split("/").pop()!.slice(0, 200),
+      originalName: name,
+      mimeType,
+      size,
+      storagePath: url.toString(),
     });
     return NextResponse.json({ ok: true, id: row.id });
   } catch (e) {
