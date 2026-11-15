@@ -23,7 +23,7 @@ test("discovery is local, listings preserve file metadata, and only the owner ca
   const fetch = t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(url, "https://studyhub-lime.vercel.app/api/mcp");
     assert.equal(options.headers.Authorization, "Bearer test-only");
-    assert.equal(options.redirect, "error");
+    assert.equal(options.redirect, "manual");
     const envelope = JSON.parse(options.body);
     const result = { structuredContent: { fileId: envelope.params.arguments.file.file_id } };
     return Response.json({ jsonrpc: "2.0", id: envelope.id, result });
@@ -38,4 +38,15 @@ test("discovery is local, listings preserve file metadata, and only the owner ca
   assert.equal(fetch.mock.callCount(), 0);
   const accepted = await worker.fetch(request("tools/call", params, caller), env);
   assert.equal((await accepted.json()).result.structuredContent.fileId, "file-example");
+});
+
+test("does not follow a redirect from StudyHub", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async (_url, options) => {
+    assert.equal(options.redirect, "manual");
+    return Response.redirect("https://example.test/other", 307);
+  });
+  const params = { name: "search_materials", arguments: { query: "Реферат" } };
+  const response = await worker.fetch(request("tools/call", params, caller), env);
+  assert.deepEqual((await response.json()).error, { code: -32002, message: "StudyHub returned HTTP 307" });
+  assert.equal(fetch.mock.callCount(), 1);
 });

@@ -55,7 +55,8 @@ export default {
           "MCP-Protocol-Version": "2025-11-25",
         },
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-        redirect: "error",
+        // Workers supports manual redirects. Keep the bearer token on the fixed StudyHub endpoint.
+        redirect: "manual",
         signal: AbortSignal.timeout(45_000),
       });
       if (!response.ok) return error(id, -32002, `StudyHub returned HTTP ${response.status}`);
