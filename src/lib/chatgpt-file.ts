@@ -12,6 +12,18 @@ export type ChatFile = z.infer<typeof chatFileSchema>;
 
 export class ChatFileError extends Error {}
 
+// ChatGPT fileParams also uses regional OpenAI Azure accounts for signed downloads.
+const OPENAI_BLOB_HOST = /^oaisdmntpr[a-z0-9]{1,14}\.blob\.core\.windows\.net$/;
+
+function isChatFileUrl(url: URL) {
+  if (url.protocol !== "https:" || url.port || url.username || url.password || url.hash) return false;
+  if (url.hostname === "files.oaiusercontent.com") return true;
+  return OPENAI_BLOB_HOST.test(url.hostname)
+    && Boolean(url.searchParams.get("sig"))
+    && Boolean(url.searchParams.get("sp")?.includes("r"))
+    && Number.isFinite(Date.parse(url.searchParams.get("se") ?? ""));
+}
+
 function dispositionName(header: string | null) {
   const encoded = /(?:^|;)\s*filename\*=UTF-8'[^']*'([^;]+)/i.exec(header ?? "")?.[1];
   if (encoded) {
@@ -26,9 +38,10 @@ function dispositionName(header: string | null) {
 
 export async function downloadChatFile(input: ChatFile): Promise<File> {
   const url = new URL(input.download_url);
-  if (url.protocol !== "https:" || url.hostname !== "files.oaiusercontent.com" || url.port
-      || url.username || url.password || url.hash) {
-    throw new ChatFileError("Expected a temporary ChatGPT file URL");
+  if (!isChatFileUrl(url)) {
+    // A bearer signature may be in the query string. Report only the URL scheme and host.
+    const host = /^[a-z0-9.-]{1,253}$/.test(url.hostname) ? url.hostname : "(no DNS host)";
+    throw new ChatFileError(`Expected a temporary ChatGPT file URL (source: ${url.protocol} ${host})`);
   }
   const response = await fetch(url, {
     redirect: "error", cache: "no-store", signal: AbortSignal.timeout(20_000),
