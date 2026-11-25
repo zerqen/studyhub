@@ -1,5 +1,10 @@
 package ru.studyhub.app.ui.screens
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,13 +29,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -46,6 +55,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -63,9 +73,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ru.studyhub.app.data.AttachmentDto
 import ru.studyhub.app.data.DateHelpers
 import ru.studyhub.app.data.LectureDto
 import ru.studyhub.app.data.MathFormatter
@@ -74,6 +87,7 @@ import ru.studyhub.app.data.QuestionDto
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.SubjectDto
 import ru.studyhub.app.data.TaskDto
+import ru.studyhub.app.ui.components.AttachmentRowItem
 import ru.studyhub.app.ui.components.KaTeXMarkdownView
 import ru.studyhub.app.ui.components.MarkdownMathText
 import ru.studyhub.app.ui.components.StudyCard
@@ -109,6 +123,7 @@ fun MaterialsScreen(
   onOpenNote: (NoteDto) -> Unit,
   onCreateNote: (subjectId: String?) -> Unit,
   onOpenLecture: (LectureDto) -> Unit,
+  onCreateLecture: (subjectId: String?) -> Unit,
   onToggleTask: (String) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
 ) {
@@ -125,6 +140,7 @@ fun MaterialsScreen(
       onOpenNote = onOpenNote,
       onCreateNote = { onCreateNote(selectedSubject.id) },
       onOpenLecture = onOpenLecture,
+      onCreateLecture = { onCreateLecture(selectedSubject.id) },
       onToggleTask = onToggleTask,
       onOpenTask = onOpenTask,
     )
@@ -259,6 +275,19 @@ fun MaterialsScreen(
         }
 
         MaterialsSection.LECTURES -> {
+          item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+              FilledTonalButton(
+                onClick = { onCreateLecture(lectureSubjectFilter) },
+                shape = RoundedCornerShape(10.dp),
+              ) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Новая лекция")
+              }
+            }
+          }
+
           if (snapshot.subjects.isNotEmpty()) {
             item {
               LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -289,7 +318,7 @@ fun MaterialsScreen(
             item {
               EmptyMaterialsCard(
                 title = "Лекций пока нет",
-                hint = "Конспекты лекций с сайта автоматически загрузятся сюда для чтения оффлайн.",
+                hint = "Нажми «Новая лекция», чтобы создать лекцию и прикрепить PDF или аудио.",
               )
             }
           } else {
@@ -319,6 +348,7 @@ private fun SubjectDetailView(
   onOpenNote: (NoteDto) -> Unit,
   onCreateNote: () -> Unit,
   onOpenLecture: (LectureDto) -> Unit,
+  onCreateLecture: () -> Unit,
   onToggleTask: (String) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
 ) {
@@ -412,8 +442,17 @@ private fun SubjectDetailView(
 
       when (tab) {
         SubjectTab.LECTURES -> {
+          item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+              FilledTonalButton(onClick = onCreateLecture, shape = RoundedCornerShape(10.dp)) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Новая лекция")
+              }
+            }
+          }
           if (subjectLectures.isEmpty()) {
-            item { EmptyMaterialsCard("Лекций нет", "Конспекты лекций по предмету появятся после синхронизации.") }
+            item { EmptyMaterialsCard("Лекций нет", "Нажми «Новая лекция», чтобы добавить лекцию, PDF или аудио.") }
           } else {
             items(subjectLectures, key = { it.id }) { lecture ->
               LectureListCard(lecture = lecture, subject = null, onClick = { onOpenLecture(lecture) })
@@ -749,15 +788,74 @@ private fun EmptyMaterialsCard(title: String, hint: String) {
   }
 }
 
+private enum class LectureSheetTab(val label: String) {
+  FILES("Файлы"),
+  TRANSCRIPT("Расшифровка"),
+  SUMMARY("Конспект"),
+}
+
+private val TRANSCRIPT_HEADER_RE = Regex("^<!--file:[^|]*\\|(.*)-->\\s*$")
+
+private fun readPickedUriBytes(context: android.content.Context, uri: Uri): Triple<String, String, ByteArray>? {
+  val resolver = context.contentResolver
+  var displayName = "file"
+  var reportedSize = -1L
+  resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+    if (cursor.moveToFirst()) {
+      val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+      if (nameIdx >= 0) {
+        cursor.getString(nameIdx)?.takeIf { it.isNotBlank() }?.let { displayName = it }
+      }
+      val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+      if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
+        reportedSize = cursor.getLong(sizeIdx)
+      }
+    }
+  }
+  val maxBytes = 300L * 1024L * 1024L
+  if (reportedSize > maxBytes) {
+    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
+    return null
+  }
+  val mimeType = resolver.getType(uri) ?: "application/octet-stream"
+  val bytes = try {
+    resolver.openInputStream(uri)?.use { it.readBytes() }
+  } catch (_: OutOfMemoryError) {
+    Toast.makeText(context, "Файл слишком большой для чтения в память", Toast.LENGTH_LONG).show()
+    return null
+  } catch (e: Exception) {
+    Toast.makeText(context, e.message ?: "Не удалось прочитать файл", Toast.LENGTH_LONG).show()
+    return null
+  }
+  if (bytes == null || bytes.isEmpty()) {
+    Toast.makeText(context, "Выбран пустой файл", Toast.LENGTH_SHORT).show()
+    return null
+  }
+  if (bytes.size.toLong() > maxBytes) {
+    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
+    return null
+  }
+  return Triple(displayName, mimeType, bytes)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LectureReaderSheet(
-  lecture: LectureDto,
-  subject: SubjectDto?,
+fun LectureEditorSheet(
+  subjects: List<SubjectDto>,
+  initialSubjectId: String? = null,
   onDismiss: () -> Unit,
+  onCreate: (subjectId: String, title: String, number: Int?, date: String?, summary: String) -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  var subjectId by remember(subjects, initialSubjectId) {
+    mutableStateOf(initialSubjectId ?: subjects.firstOrNull()?.id)
+  }
+  var title by remember { mutableStateOf("") }
+  var numberText by remember { mutableStateOf("") }
+  var dateText by remember { mutableStateOf(DateHelpers.today().toString()) }
+  var summary by remember { mutableStateOf("") }
+
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
@@ -768,6 +866,154 @@ fun LectureReaderSheet(
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
         .navigationBarsPadding()
+        .imePadding()
+        .padding(horizontal = 20.dp, vertical = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      Text("Новая лекция", style = MaterialTheme.typography.headlineMedium, color = colors.fg)
+
+      if (subjects.isEmpty()) {
+        Text(
+          text = "Сначала добавь предмет на сайте и нажми синхронизацию — лекция должна быть привязана к предмету.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = colors.muted,
+        )
+      } else {
+        Text("Предмет", style = MaterialTheme.typography.labelLarge, color = colors.muted)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          items(subjects, key = { it.id }) { s ->
+            FilterChip(
+              selected = subjectId == s.id,
+              onClick = { subjectId = s.id },
+              label = { Text("${s.emoji} ${s.name}") },
+            )
+          }
+        }
+
+        OutlinedTextField(
+          value = title,
+          onValueChange = { title = it },
+          label = { Text("Название лекции") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+          OutlinedTextField(
+            value = numberText,
+            onValueChange = { if (it.all { ch -> ch.isDigit() } && it.length <= 4) numberText = it },
+            label = { Text("№ (опц.)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(0.35f),
+          )
+          OutlinedTextField(
+            value = dateText,
+            onValueChange = { if (it.length <= 10) dateText = it },
+            label = { Text("Дата (ГГГГ-ММ-ДД)") },
+            singleLine = true,
+            modifier = Modifier.weight(0.65f),
+          )
+        }
+
+        OutlinedTextField(
+          value = summary,
+          onValueChange = { summary = it },
+          label = { Text("Конспект (Markdown и формулы)") },
+          minLines = 4,
+          maxLines = 10,
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        Button(
+          onClick = {
+            val sid = subjectId ?: return@Button
+            val cleanDate = dateText.trim().takeIf { DateHelpers.parseDateOnly(it) != null }
+            onCreate(sid, title.trim(), numberText.toIntOrNull(), cleanDate, summary)
+            onDismiss()
+          },
+          enabled = subjectId != null && title.isNotBlank(),
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+          shape = RoundedCornerShape(12.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+        ) {
+          Text("Создать лекцию", color = Color.White, style = MaterialTheme.typography.titleMedium)
+        }
+      }
+
+      Spacer(modifier = Modifier.height(14.dp))
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LectureReaderSheet(
+  lecture: LectureDto,
+  subject: SubjectDto?,
+  attachments: List<AttachmentDto>,
+  busyAttachmentId: String?,
+  isUploading: Boolean,
+  transcribingAttachmentId: String?,
+  isAttachmentCached: (AttachmentDto) -> Boolean,
+  onDismiss: () -> Unit,
+  onOpenAttachment: (AttachmentDto) -> Unit,
+  onUploadFile: (fileName: String, mimeType: String, bytes: ByteArray) -> Unit,
+  onDeleteAttachment: (String) -> Unit,
+  onTranscribeAudio: (String) -> Unit,
+  onSaveEdit: (title: String, number: Int?, date: String?, summary: String, transcript: String) -> Unit,
+  onDeleteLecture: () -> Unit,
+) {
+  val colors = StudyHubThemeColors.current
+  val context = LocalContext.current
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+  var activeTab by rememberSaveable(lecture.id) {
+    mutableStateOf(
+      when {
+        lecture.summary.isNotBlank() -> LectureSheetTab.SUMMARY
+        attachments.isNotEmpty() || lecture.transcript.isBlank() -> LectureSheetTab.FILES
+        else -> LectureSheetTab.TRANSCRIPT
+      },
+    )
+  }
+  var editing by remember(lecture.id) { mutableStateOf(false) }
+  var editTitle by remember(lecture.id, lecture.title) { mutableStateOf(lecture.title) }
+  var editNumber by remember(lecture.id, lecture.number) { mutableStateOf(lecture.number?.toString().orEmpty()) }
+  var editDate by remember(lecture.id, lecture.date) { mutableStateOf(lecture.date?.take(10).orEmpty()) }
+  var editSummary by remember(lecture.id, lecture.summary) { mutableStateOf(lecture.summary) }
+  var editTranscript by remember(lecture.id, lecture.transcript) { mutableStateOf(lecture.transcript) }
+  var confirmDelete by remember { mutableStateOf(false) }
+
+  val docPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) {
+      readPickedUriBytes(context, uri)?.let { (name, mime, bytes) ->
+        onUploadFile(name, mime, bytes)
+      }
+    }
+  }
+
+  val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) {
+      readPickedUriBytes(context, uri)?.let { (name, mime, bytes) ->
+        onUploadFile(name, mime, bytes)
+      }
+    }
+  }
+
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    sheetState = sheetState,
+    containerColor = colors.surface,
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .navigationBarsPadding()
+        .imePadding()
         .padding(horizontal = 20.dp, vertical = 8.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -777,24 +1023,251 @@ fun LectureReaderSheet(
         if (!lecture.date.isNullOrBlank()) add(DateHelpers.formatShortDate(lecture.date))
       }.joinToString(" · ")
 
-      if (meta.isNotBlank()) {
-        Text(meta, style = MaterialTheme.typography.labelLarge, color = colors.accent)
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+      ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          if (meta.isNotBlank()) {
+            Text(meta, style = MaterialTheme.typography.labelLarge, color = colors.accent)
+          }
+          Text(lecture.title, style = MaterialTheme.typography.headlineMedium, color = colors.fg)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          IconButton(onClick = { editing = !editing }) {
+            Icon(
+              Icons.Rounded.Edit,
+              contentDescription = "Редактировать лекцию",
+              tint = if (editing) colors.accent else colors.fg,
+            )
+          }
+          IconButton(onClick = { confirmDelete = true }) {
+            Icon(Icons.Rounded.DeleteOutline, contentDescription = "Удалить лекцию", tint = colors.danger)
+          }
+        }
       }
-      Text(lecture.title, style = MaterialTheme.typography.headlineMedium, color = colors.fg)
-      HorizontalDivider(color = colors.line)
 
-      if (lecture.summary.isBlank()) {
-        Text(
-          text = "Конспект этой лекции пока пуст.",
-          style = MaterialTheme.typography.bodyMedium,
-          color = colors.muted,
+      if (editing) {
+        HorizontalDivider(color = colors.line)
+        OutlinedTextField(
+          value = editTitle,
+          onValueChange = { editTitle = it },
+          label = { Text("Название") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth(),
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+          OutlinedTextField(
+            value = editNumber,
+            onValueChange = { if (it.all { ch -> ch.isDigit() } && it.length <= 4) editNumber = it },
+            label = { Text("№") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(0.35f),
+          )
+          OutlinedTextField(
+            value = editDate,
+            onValueChange = { if (it.length <= 10) editDate = it },
+            label = { Text("Дата (ГГГГ-ММ-ДД)") },
+            singleLine = true,
+            modifier = Modifier.weight(0.65f),
+          )
+        }
+        OutlinedTextField(
+          value = editSummary,
+          onValueChange = { editSummary = it },
+          label = { Text("Конспект (Markdown)") },
+          minLines = 5,
+          maxLines = 12,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+          value = editTranscript,
+          onValueChange = { editTranscript = it },
+          label = { Text("Расшифровка") },
+          minLines = 4,
+          maxLines = 10,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+          OutlinedButton(
+            onClick = { editing = false },
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp),
+          ) {
+            Text("Отмена")
+          }
+          Button(
+            onClick = {
+              val cleanDate = editDate.trim().takeIf { DateHelpers.parseDateOnly(it) != null }
+              onSaveEdit(
+                editTitle.trim().ifBlank { lecture.title },
+                editNumber.toIntOrNull(),
+                cleanDate,
+                editSummary,
+                editTranscript,
+              )
+              editing = false
+            },
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
+          ) {
+            Text("Сохранить", color = Color.White)
+          }
+        }
       } else {
-        KaTeXMarkdownView(markdown = lecture.summary, textSizeSp = 15)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          items(LectureSheetTab.entries) { tab ->
+            val label = when (tab) {
+              LectureSheetTab.FILES -> "${tab.label} (${attachments.size})"
+              LectureSheetTab.TRANSCRIPT -> if (lecture.transcript.isNotBlank()) "${tab.label} •" else tab.label
+              LectureSheetTab.SUMMARY -> tab.label
+            }
+            FilterChip(
+              selected = activeTab == tab,
+              onClick = { activeTab = tab },
+              label = { Text(label) },
+            )
+          }
+        }
+        HorizontalDivider(color = colors.line)
+
+        when (activeTab) {
+          LectureSheetTab.FILES -> {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              FilledTonalButton(
+                onClick = { docPicker.launch(arrayOf("application/pdf", "image/*", "text/*", "*/*")) },
+                enabled = !isUploading,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f),
+              ) {
+                Icon(Icons.Rounded.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("+ PDF / файл", maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
+              OutlinedButton(
+                onClick = { audioPicker.launch(arrayOf("audio/*")) },
+                enabled = !isUploading,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f),
+              ) {
+                Icon(Icons.Rounded.AudioFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("+ Аудио", maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
+            }
+
+            if (isUploading) {
+              Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = colors.accent)
+                Text("Загружаем файл на сервер…", style = MaterialTheme.typography.labelMedium, color = colors.muted)
+              }
+            }
+
+            if (attachments.isEmpty()) {
+              Text(
+                text = "Прикрепите PDF, материалы или аудиозапись лекции (до 300 МБ). Аудиофайлы можно автоматически расшифровать через ИИ.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.muted,
+              )
+            } else {
+              attachments.forEach { att ->
+                val isAudio = att.mimeType.startsWith("audio/", ignoreCase = true)
+                AttachmentRowItem(
+                  attachment = att,
+                  isCached = isAttachmentCached(att),
+                  isBusy = busyAttachmentId == att.id,
+                  isTranscribing = transcribingAttachmentId == att.id,
+                  onOpen = { onOpenAttachment(att) },
+                  onTranscribe = if (isAudio) ({ onTranscribeAudio(att.id) }) else null,
+                  onDelete = { onDeleteAttachment(att.id) },
+                )
+              }
+            }
+          }
+
+          LectureSheetTab.TRANSCRIPT -> {
+            if (lecture.transcript.isBlank()) {
+              Text(
+                text = "Расшифровки пока нет. Загрузите аудио во вкладке «Файлы» и нажмите «Расшифровать аудио (ИИ)».",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.muted,
+              )
+            } else {
+              val lines = remember(lecture.transcript) { lecture.transcript.lines() }
+              Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                lines.forEach { line ->
+                  val headerMatch = TRANSCRIPT_HEADER_RE.matchEntire(line.trim())
+                  when {
+                    headerMatch != null -> {
+                      Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = colors.subtle,
+                      ) {
+                        Text(
+                          text = headerMatch.groupValues[1],
+                          style = MaterialTheme.typography.labelMedium,
+                          color = colors.accent,
+                          modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                      }
+                    }
+                    line.isNotBlank() -> {
+                      Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.fg,
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          LectureSheetTab.SUMMARY -> {
+            if (lecture.summary.isBlank()) {
+              Text(
+                text = "Конспект этой лекции пока пуст. Нажми карандаш вверху, чтобы добавить текст.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.muted,
+              )
+            } else {
+              KaTeXMarkdownView(markdown = lecture.summary, textSizeSp = 15)
+            }
+          }
+        }
       }
 
       Spacer(modifier = Modifier.height(16.dp))
     }
+  }
+
+  if (confirmDelete) {
+    AlertDialog(
+      onDismissRequest = { confirmDelete = false },
+      title = { Text("Удалить лекцию?") },
+      text = { Text("Лекция «${lecture.title}» и её прикреплённые файлы будут удалены.") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            confirmDelete = false
+            onDeleteLecture()
+            onDismiss()
+          },
+        ) {
+          Text("Удалить", color = colors.danger)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { confirmDelete = false }) { Text("Отмена") }
+      },
+    )
   }
 }
 
@@ -804,6 +1277,10 @@ fun NoteEditorSheet(
   existingNote: NoteDto?,
   subjects: List<SubjectDto>,
   initialSubjectId: String? = null,
+  attachments: List<AttachmentDto> = emptyList(),
+  busyAttachmentId: String? = null,
+  isAttachmentCached: (AttachmentDto) -> Boolean = { false },
+  onOpenAttachment: (AttachmentDto) -> Unit = {},
   onDismiss: () -> Unit,
   onSave: (title: String, content: String, subjectId: String?, color: String, pinned: Boolean) -> Unit,
   onDelete: (() -> Unit)? = null,
@@ -954,6 +1431,19 @@ fun NoteEditorSheet(
           colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
         ) {
           Text("Сохранить заметку", color = Color.White, style = MaterialTheme.typography.titleMedium)
+        }
+      }
+
+      if (attachments.isNotEmpty()) {
+        HorizontalDivider(color = colors.line)
+        Text("Вложения (${attachments.size})", style = MaterialTheme.typography.titleMedium, color = colors.fg)
+        attachments.forEach { att ->
+          AttachmentRowItem(
+            attachment = att,
+            isCached = isAttachmentCached(att),
+            isBusy = busyAttachmentId == att.id,
+            onOpen = { onOpenAttachment(att) },
+          )
         }
       }
 

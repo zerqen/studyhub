@@ -60,11 +60,13 @@ import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import ru.studyhub.app.data.AttachmentDto
 import ru.studyhub.app.data.DateHelpers
 import ru.studyhub.app.data.SubjectDto
 import ru.studyhub.app.data.TaskDto
 import ru.studyhub.app.data.TaskKind
 import ru.studyhub.app.data.TaskPriority
+import ru.studyhub.app.ui.components.AttachmentRowItem
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -326,6 +328,10 @@ fun CreateTaskSheet(
 fun TaskDetailSheet(
   task: TaskDto,
   subjects: List<SubjectDto>,
+  attachments: List<AttachmentDto> = emptyList(),
+  busyAttachmentId: String? = null,
+  isAttachmentCached: (AttachmentDto) -> Boolean = { false },
+  onOpenAttachment: (AttachmentDto) -> Unit = {},
   onDismiss: () -> Unit,
   onToggleDone: () -> Unit,
   onSaveEdits: (
@@ -560,6 +566,23 @@ fun TaskDetailSheet(
           colors = ButtonDefaults.buttonColors(containerColor = colors.accent),
         ) {
           Icon(Icons.Rounded.Add, contentDescription = "Добавить", tint = Color.White)
+        }
+      }
+
+      if (attachments.isNotEmpty()) {
+        HorizontalDivider(color = colors.line)
+        Text(
+          text = "Файлы (${attachments.size})",
+          style = MaterialTheme.typography.titleMedium,
+          color = colors.fg,
+        )
+        attachments.forEach { file ->
+          AttachmentRowItem(
+            attachment = file,
+            isCached = isAttachmentCached(file),
+            isBusy = busyAttachmentId == file.id,
+            onOpen = { onOpenAttachment(file) },
+          )
         }
       }
 

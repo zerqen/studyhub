@@ -36,11 +36,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import ru.studyhub.app.data.DateHelpers
+import ru.studyhub.app.data.QuickTaskParsed
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.TaskDto
+import ru.studyhub.app.ui.components.QuickAddTaskBar
 import ru.studyhub.app.ui.components.StudyCard
+import ru.studyhub.app.ui.components.SwipeableTaskRow
 import ru.studyhub.app.ui.components.SyncStatusPill
-import ru.studyhub.app.ui.components.TaskRowItem
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
 private enum class TaskFilter(val label: String) {
@@ -57,6 +59,8 @@ fun TasksScreen(
   snapshot: StudyHubSnapshot,
   onSync: () -> Unit,
   onToggleTask: (String) -> Unit,
+  onPostponeTask: (String) -> Unit,
+  onQuickCreateTask: (QuickTaskParsed) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
@@ -128,6 +132,13 @@ fun TasksScreen(
             onSyncClick = onSync,
           )
         }
+      }
+
+      item {
+        QuickAddTaskBar(
+          subjects = snapshot.subjects,
+          onQuickCreate = onQuickCreateTask,
+        )
       }
 
       item {
@@ -214,10 +225,11 @@ fun TasksScreen(
         item {
           StudyCard {
             filtered.forEachIndexed { idx, task ->
-              TaskRowItem(
+              SwipeableTaskRow(
                 task = task,
                 subject = task.subjectId?.let { subjectsById[it] },
                 onToggleDone = { onToggleTask(task.id) },
+                onPostponeTomorrow = { onPostponeTask(task.id) },
                 onClick = { onOpenTask(task) },
                 showDueDate = true,
               )

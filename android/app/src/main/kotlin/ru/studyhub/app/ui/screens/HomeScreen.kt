@@ -41,15 +41,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.studyhub.app.data.AuthSession
 import ru.studyhub.app.data.DateHelpers
+import ru.studyhub.app.data.QuickTaskParsed
 import ru.studyhub.app.data.SrsEngine
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.SubjectDto
 import ru.studyhub.app.data.TaskDto
 import ru.studyhub.app.data.TaskKind
 import ru.studyhub.app.data.TodayEventDto
+import ru.studyhub.app.ui.components.QuickAddTaskBar
 import ru.studyhub.app.ui.components.StudyCard
+import ru.studyhub.app.ui.components.SwipeableTaskRow
 import ru.studyhub.app.ui.components.SyncStatusPill
-import ru.studyhub.app.ui.components.TaskRowItem
 import ru.studyhub.app.ui.components.parseHexColor
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
@@ -60,6 +62,8 @@ fun HomeScreen(
   snapshot: StudyHubSnapshot,
   onSync: () -> Unit,
   onToggleTask: (String) -> Unit,
+  onPostponeTask: (String) -> Unit,
+  onQuickCreateTask: (QuickTaskParsed) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
   onOpenCreateTask: () -> Unit,
   onOpenAllTasks: () -> Unit,
@@ -143,6 +147,14 @@ fun HomeScreen(
         }
       }
 
+      // Quick Add Bar
+      item {
+        QuickAddTaskBar(
+          subjects = snapshot.subjects,
+          onQuickCreate = onQuickCreateTask,
+        )
+      }
+
       // Main card: This Week
       item {
         StudyCard {
@@ -222,10 +234,11 @@ fun HomeScreen(
               }
 
               group.items.forEachIndexed { idx, task ->
-                TaskRowItem(
+                SwipeableTaskRow(
                   task = task,
                   subject = task.subjectId?.let { subjectsById[it] },
                   onToggleDone = { onToggleTask(task.id) },
+                  onPostponeTomorrow = { onPostponeTask(task.id) },
                   onClick = { onOpenTask(task) },
                   showDueDate = group.key == "overdue",
                 )

@@ -1,7 +1,17 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+}
+
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+  if (keystorePropsFile.exists()) {
+    keystorePropsFile.inputStream().use { load(it) }
+  }
 }
 
 android {
@@ -11,14 +21,39 @@ android {
     applicationId = "ru.studyhub.app"
     minSdk = 26
     targetSdk = 36
-    versionCode = 4
-    versionName = "1.3.0"
+    versionCode = 5
+    versionName = "1.4.0"
+  }
+
+  signingConfigs {
+    create("release") {
+      val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+        ?: keystoreProps.getProperty("storeFile")
+      val ksFile = ksPath?.let { path ->
+        val f = File(path)
+        if (f.isAbsolute) f else rootProject.file(path)
+      }
+      if (ksFile != null && ksFile.exists()) {
+        storeFile = ksFile
+        storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+          ?: keystoreProps.getProperty("storePassword")
+        keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+          ?: keystoreProps.getProperty("keyAlias")
+        keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+          ?: keystoreProps.getProperty("keyPassword")
+      }
+    }
   }
 
   buildTypes {
     release {
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      val relConfig = signingConfigs.getByName("release")
+      if (relConfig.storeFile != null) {
+        signingConfig = relConfig
+      }
     }
   }
   compileOptions {

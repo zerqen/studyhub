@@ -8,12 +8,12 @@ import androidx.core.database.sqlite.transaction
 
 /**
  * Local SQLite database powering full offline mode, SRS flashcards, Calendar,
- * Notes, Lectures, local notifications, and the home-screen Deadlines widget.
+ * Notes, Lectures, Attachments metadata, local notifications, and the Deadlines widget.
  */
 class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
   companion object {
     private const val DB_NAME = "studyhub_offline.db"
-    private const val DB_VERSION = 3
+    private const val DB_VERSION = 4
   }
 
   override fun onCreate(db: SQLiteDatabase) {
@@ -97,14 +97,17 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
     )
     createV2Tables(db)
     createV3Tables(db)
+    createV4Tables(db)
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-    if (oldVersion < 2) {
-      createV2Tables(db)
-    }
-    if (oldVersion < 3) {
-      createV3Tables(db)
+    if (oldVersion < 2) createV2Tables(db)
+    if (oldVersion < 3) createV3Tables(db)
+    if (oldVersion < 4) {
+      runCatching {
+        db.execSQL("ALTER TABLE lectures ADD COLUMN transcript TEXT NOT NULL DEFAULT ''")
+      }
+      createV4Tables(db)
     }
   }
 
@@ -177,12 +180,35 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         title TEXT NOT NULL,
         date TEXT,
         summary TEXT NOT NULL,
+        transcript TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
       """.trimIndent(),
     )
     db.execSQL("CREATE INDEX IF NOT EXISTS idx_lectures_subject ON lectures(subject_id)")
+  }
+
+  private fun createV4Tables(db: SQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        subject_id TEXT,
+        task_id TEXT,
+        note_id TEXT,
+        lecture_id TEXT,
+        question_id TEXT,
+        created_at TEXT NOT NULL
+      )
+      """.trimIndent(),
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_lecture ON attachments(lecture_id)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id)")
   }
 
   @Synchronized
@@ -313,7 +339,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
 
     val lectures = mutableListOf<LectureDto>()
     db.rawQuery(
-      "SELECT id, subject_id, number, title, date, summary, created_at, updated_at FROM lectures ORDER BY number DESC, date DESC, updated_at DESC",
+      "SELECT id, subject_id, number, title, date, summary, transcript, created_at, updated_at FROM lectures ORDER BY number DESC, date DESC, updated_at DESC",
       null,
     ).use { c ->
       while (c.moveToNext()) {
@@ -324,8 +350,30 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
           title = c.getString(3),
           date = c.getString(4),
           summary = c.getString(5),
-          createdAt = c.getString(6),
-          updatedAt = c.getString(7),
+          transcript = c.getString(6),
+          createdAt = c.getString(7),
+          updatedAt = c.getString(8),
+        )
+      }
+    }
+
+    val attachments = mutableListOf<AttachmentDto>()
+    db.rawQuery(
+      "SELECT id, original_name, mime_type, size, subject_id, task_id, note_id, lecture_id, question_id, created_at FROM attachments ORDER BY created_at DESC",
+      null,
+    ).use { c ->
+      while (c.moveToNext()) {
+        attachments += AttachmentDto(
+          id = c.getString(0),
+          originalName = c.getString(1),
+          mimeType = c.getString(2),
+          size = c.getLong(3),
+          subjectId = c.getString(4),
+          taskId = c.getString(5),
+          noteId = c.getString(6),
+          lectureId = c.getString(7),
+          questionId = c.getString(8),
+          createdAt = c.getString(9),
         )
       }
     }
@@ -343,6 +391,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       questions = questions,
       notes = notes,
       lectures = lectures,
+      attachments = attachments,
       pendingOpsCount = pendingCount,
     )
   }
@@ -381,6 +430,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
     questions: List<QuestionDto>,
     notes: List<NoteDto>,
     lectures: List<LectureDto>,
+    attachments: List<AttachmentDto>,
   ) {
     writableDatabase.transaction {
       delete("subjects", null, null)
@@ -415,19 +465,16 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       writeEventsTable(this, "calendar_events", calendarEvents)
 
       delete("questions", null, null)
-      for (q in questions) {
-        insertQuestionRow(this, q)
-      }
+      for (q in questions) insertQuestionRow(this, q)
 
       delete("notes", null, null)
-      for (n in notes) {
-        insertNoteRow(this, n)
-      }
+      for (n in notes) insertNoteRow(this, n)
 
       delete("lectures", null, null)
-      for (l in lectures) {
-        insertLectureRow(this, l)
-      }
+      for (l in lectures) insertLectureRow(this, l)
+
+      delete("attachments", null, null)
+      for (a in attachments) insertAttachmentRow(this, a)
     }
   }
 
@@ -456,16 +503,12 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
 
   @Synchronized
   fun upsertQuestion(q: QuestionDto) {
-    writableDatabase.transaction {
-      insertQuestionRow(this, q)
-    }
+    writableDatabase.transaction { insertQuestionRow(this, q) }
   }
 
   @Synchronized
   fun upsertNote(note: NoteDto) {
-    writableDatabase.transaction {
-      insertNoteRow(this, note)
-    }
+    writableDatabase.transaction { insertNoteRow(this, note) }
   }
 
   @Synchronized
@@ -483,13 +526,43 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
   }
 
   @Synchronized
+  fun upsertLecture(lecture: LectureDto) {
+    writableDatabase.transaction { insertLectureRow(this, lecture) }
+  }
+
+  @Synchronized
+  fun deleteLectureLocal(lectureId: String) {
+    writableDatabase.transaction {
+      delete("attachments", "lecture_id = ?", arrayOf(lectureId))
+      delete("lectures", "id = ?", arrayOf(lectureId))
+    }
+  }
+
+  @Synchronized
+  fun remapLectureId(oldId: String, serverLecture: LectureDto) {
+    writableDatabase.transaction {
+      delete("lectures", "id = ?", arrayOf(oldId))
+      insertLectureRow(this, serverLecture)
+      execSQL("UPDATE pending_ops SET entity_id = ? WHERE entity_id = ?", arrayOf(serverLecture.id, oldId))
+    }
+  }
+
+  @Synchronized
+  fun upsertAttachment(a: AttachmentDto) {
+    writableDatabase.transaction { insertAttachmentRow(this, a) }
+  }
+
+  @Synchronized
+  fun deleteAttachmentLocal(attachmentId: String) {
+    writableDatabase.delete("attachments", "id = ?", arrayOf(attachmentId))
+  }
+
+  @Synchronized
   fun upsertTask(task: TaskDto) {
     writableDatabase.transaction {
       insertTaskRow(this, task)
       delete("subtasks", "task_id = ?", arrayOf(task.id))
-      for (st in task.subtasks) {
-        insertSubtaskRow(this, st)
-      }
+      for (st in task.subtasks) insertSubtaskRow(this, st)
     }
   }
 
@@ -503,9 +576,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
 
   @Synchronized
   fun upsertSubtask(subtask: SubtaskDto) {
-    writableDatabase.transaction {
-      insertSubtaskRow(this, subtask)
-    }
+    writableDatabase.transaction { insertSubtaskRow(this, subtask) }
   }
 
   @Synchronized
@@ -558,9 +629,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       delete("subtasks", "task_id = ?", arrayOf(oldId))
       delete("tasks", "id = ?", arrayOf(oldId))
       insertTaskRow(this, serverTask)
-      for (st in serverTask.subtasks) {
-        insertSubtaskRow(this, st)
-      }
+      for (st in serverTask.subtasks) insertSubtaskRow(this, st)
       execSQL("UPDATE pending_ops SET entity_id = ? WHERE entity_id = ?", arrayOf(serverTask.id, oldId))
     }
   }
@@ -585,6 +654,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       delete("questions", null, null)
       delete("notes", null, null)
       delete("lectures", null, null)
+      delete("attachments", null, null)
       delete("pending_ops", null, null)
     }
   }
@@ -687,8 +757,29 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         put("title", l.title)
         put("date", l.date)
         put("summary", l.summary)
+        put("transcript", l.transcript)
         put("created_at", l.createdAt)
         put("updated_at", l.updatedAt)
+      },
+      SQLiteDatabase.CONFLICT_REPLACE,
+    )
+  }
+
+  private fun insertAttachmentRow(db: SQLiteDatabase, a: AttachmentDto) {
+    db.insertWithOnConflict(
+      "attachments",
+      null,
+      ContentValues().apply {
+        put("id", a.id)
+        put("original_name", a.originalName)
+        put("mime_type", a.mimeType)
+        put("size", a.size)
+        put("subject_id", a.subjectId)
+        put("task_id", a.taskId)
+        put("note_id", a.noteId)
+        put("lecture_id", a.lectureId)
+        put("question_id", a.questionId)
+        put("created_at", a.createdAt)
       },
       SQLiteDatabase.CONFLICT_REPLACE,
     )

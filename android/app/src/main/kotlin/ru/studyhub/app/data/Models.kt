@@ -195,9 +195,74 @@ data class LectureDto(
   val title: String,
   val date: String? = null,
   val summary: String = "",
+  val transcript: String = "",
   val createdAt: String = "",
   val updatedAt: String = "",
 )
+
+@Serializable
+data class AttachmentDto(
+  val id: String,
+  val originalName: String,
+  val mimeType: String,
+  val size: Long,
+  val subjectId: String? = null,
+  val taskId: String? = null,
+  val noteId: String? = null,
+  val lectureId: String? = null,
+  val questionId: String? = null,
+  val createdAt: String = "",
+)
+
+@Serializable
+data class CreateLectureRequest(
+  val subjectId: String,
+  val title: String,
+  val number: Int? = null,
+  val date: String? = null,
+  val summary: String = "",
+  val transcript: String = "",
+)
+
+@Serializable
+data class UpdateLectureRequest(
+  val title: String? = null,
+  val number: Int? = null,
+  val date: String? = null,
+  val summary: String? = null,
+  val transcript: String? = null,
+)
+
+@Serializable
+data class LectureEnvelope(val lecture: LectureDto)
+
+@Serializable
+data class AttachmentEnvelope(val attachment: AttachmentDto)
+
+@Serializable
+data class BlobPrepareRequest(
+  val parentType: String,
+  val parentId: String,
+  val name: String,
+  val size: Long,
+)
+
+@Serializable
+data class BlobGrantResponse(
+  val pathname: String,
+  val mimeType: String,
+  val clientToken: String,
+  val uploadReceipt: String,
+)
+
+@Serializable
+data class BlobRegisterRequest(val uploadReceipt: String)
+
+@Serializable
+data class TranscribeRequest(val attachmentId: String)
+
+@Serializable
+data class TranscribeResponse(val transcript: String)
 
 @Serializable
 data class CreateNoteRequest(
@@ -231,6 +296,7 @@ data class SyncResponse(
   val questions: List<QuestionDto> = emptyList(),
   val notes: List<NoteDto> = emptyList(),
   val lectures: List<LectureDto> = emptyList(),
+  val attachments: List<AttachmentDto> = emptyList(),
   val stats: SyncStatsDto = SyncStatsDto(),
 )
 
@@ -317,6 +383,7 @@ data class StudyHubSnapshot(
   val questions: List<QuestionDto> = emptyList(),
   val notes: List<NoteDto> = emptyList(),
   val lectures: List<LectureDto> = emptyList(),
+  val attachments: List<AttachmentDto> = emptyList(),
   val pendingOpsCount: Int = 0,
   val isSyncing: Boolean = false,
   val lastError: String? = null,

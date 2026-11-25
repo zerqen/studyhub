@@ -34,16 +34,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.LocalDate
+import ru.studyhub.app.data.AttachmentDto
 import ru.studyhub.app.data.DateHelpers
 import ru.studyhub.app.ui.MainViewModel
+import ru.studyhub.app.ui.components.openFileWithSystemViewer
 import ru.studyhub.app.ui.screens.CalendarScreen
 import ru.studyhub.app.ui.screens.CreateTaskSheet
 import ru.studyhub.app.ui.screens.GlobalSearchSheet
 import ru.studyhub.app.ui.screens.HomeScreen
+import ru.studyhub.app.ui.screens.LectureEditorSheet
 import ru.studyhub.app.ui.screens.LectureReaderSheet
 import ru.studyhub.app.ui.screens.LoginScreen
 import ru.studyhub.app.ui.screens.MaterialsScreen
@@ -76,6 +80,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
   val state by vm.uiState.collectAsStateWithLifecycle()
+  val busyAttachmentId by vm.busyAttachmentId.collectAsStateWithLifecycle()
+  val uploadingLectureId by vm.uploadingLectureId.collectAsStateWithLifecycle()
+  val transcribingAttachmentId by vm.transcribingAttachmentId.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  val openAttachment: (AttachmentDto) -> Unit = { att ->
+    vm.openAttachment(att) { file, mime ->
+      openFileWithSystemViewer(context, file, mime)
+    }
+  }
 
   StudyHubTheme(themeMode = state.session.themeMode) {
     val colors = StudyHubThemeColors.current
@@ -110,6 +123,8 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
           var showCreateNoteSheet by rememberSaveable { mutableStateOf(false) }
           var createNoteSubjectId by rememberSaveable { mutableStateOf<String?>(null) }
           var editingNoteId by rememberSaveable { mutableStateOf<String?>(null) }
+          var showCreateLectureSheet by rememberSaveable { mutableStateOf(false) }
+          var createLectureSubjectId by rememberSaveable { mutableStateOf<String?>(null) }
           var readingLectureId by rememberSaveable { mutableStateOf<String?>(null) }
 
           val selectedTask = selectedTaskId?.let { id ->
@@ -204,6 +219,8 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
                   snapshot = state.snapshot,
                   onSync = vm::syncNow,
                   onToggleTask = vm::toggleTaskDone,
+                  onPostponeTask = vm::postponeTaskToTomorrow,
+                  onQuickCreateTask = vm::createQuickTask,
                   onOpenTask = { selectedTaskId = it.id },
                   onOpenCreateTask = {
                     createInitialDateIso = null
@@ -222,6 +239,8 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
                   snapshot = state.snapshot,
                   onSync = vm::syncNow,
                   onToggleTask = vm::toggleTaskDone,
+                  onPostponeTask = vm::postponeTaskToTomorrow,
+                  onQuickCreateTask = vm::createQuickTask,
                   onOpenTask = { selectedTaskId = it.id },
                 )
                 AppTab.MATERIALS -> MaterialsScreen(
@@ -238,6 +257,10 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
                     showCreateNoteSheet = true
                   },
                   onOpenLecture = { readingLectureId = it.id },
+                  onCreateLecture = { subjId ->
+                    createLectureSubjectId = subjId
+                    showCreateLectureSheet = true
+                  },
                   onToggleTask = vm::toggleTaskDone,
                   onOpenTask = { selectedTaskId = it.id },
                 )
@@ -272,9 +295,14 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
           }
 
           if (selectedTask != null) {
+            val taskAttachments = state.snapshot.attachments.filter { it.taskId == selectedTask.id }
             TaskDetailSheet(
               task = selectedTask,
               subjects = state.snapshot.subjects,
+              attachments = taskAttachments,
+              busyAttachmentId = busyAttachmentId,
+              isAttachmentCached = vm::isAttachmentCached,
+              onOpenAttachment = openAttachment,
               onDismiss = { selectedTaskId = null },
               onToggleDone = { vm.toggleTaskDone(selectedTask.id) },
               onSaveEdits = { title, desc, subj, due, time, prio, kind ->
@@ -300,9 +328,14 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
           }
 
           if (editingNote != null) {
+            val noteAttachments = state.snapshot.attachments.filter { it.noteId == editingNote.id }
             NoteEditorSheet(
               existingNote = editingNote,
               subjects = state.snapshot.subjects,
+              attachments = noteAttachments,
+              busyAttachmentId = busyAttachmentId,
+              isAttachmentCached = vm::isAttachmentCached,
+              onOpenAttachment = openAttachment,
               onDismiss = { editingNoteId = null },
               onSave = { title, content, subjectId, color, pinned ->
                 vm.updateNote(editingNote.id, title, content, subjectId, color, pinned)
@@ -311,12 +344,39 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
             )
           }
 
+          if (showCreateLectureSheet) {
+            LectureEditorSheet(
+              subjects = state.snapshot.subjects,
+              initialSubjectId = createLectureSubjectId,
+              onDismiss = { showCreateLectureSheet = false },
+              onCreate = vm::createLecture,
+            )
+          }
+
           if (readingLecture != null) {
             val subject = state.snapshot.subjects.firstOrNull { it.id == readingLecture.subjectId }
+            val lectureAttachments = state.snapshot.attachments.filter { it.lectureId == readingLecture.id }
             LectureReaderSheet(
               lecture = readingLecture,
               subject = subject,
+              attachments = lectureAttachments,
+              busyAttachmentId = busyAttachmentId,
+              isUploading = uploadingLectureId == readingLecture.id,
+              transcribingAttachmentId = transcribingAttachmentId,
+              isAttachmentCached = vm::isAttachmentCached,
               onDismiss = { readingLectureId = null },
+              onOpenAttachment = openAttachment,
+              onUploadFile = { name, mime, bytes ->
+                vm.uploadLectureFile(readingLecture.id, name, mime, bytes)
+              },
+              onDeleteAttachment = vm::deleteAttachment,
+              onTranscribeAudio = { attId ->
+                vm.transcribeLectureAudio(readingLecture.id, attId)
+              },
+              onSaveEdit = { title, number, date, summary, transcript ->
+                vm.updateLecture(readingLecture.id, title, number, date, summary, transcript)
+              },
+              onDeleteLecture = { vm.deleteLecture(readingLecture.id) },
             )
           }
 

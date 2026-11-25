@@ -1,5 +1,6 @@
 package ru.studyhub.app.data
 
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -23,9 +25,9 @@ class StudyHubApi {
   private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
   private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(25, TimeUnit.SECONDS)
-    .writeTimeout(25, TimeUnit.SECONDS)
+    .connectTimeout(20, TimeUnit.SECONDS)
+    .readTimeout(120, TimeUnit.SECONDS)
+    .writeTimeout(90, TimeUnit.SECONDS)
     .build()
 
   suspend fun login(serverUrl: String, email: String, password: String): LoginResponse =
@@ -115,6 +117,112 @@ class StudyHubApi {
   suspend fun deleteNote(serverUrl: String, token: String, id: String) =
     withContext(Dispatchers.IO) {
       val req = authBuilder(serverUrl, token, "/api/mobile/notes/$id").delete().build()
+      executeUnit(req)
+    }
+
+  suspend fun createLecture(serverUrl: String, token: String, payload: CreateLectureRequest): LectureDto =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/lectures").post(body).build()
+      executeJson<LectureEnvelope>(req).lecture
+    }
+
+  suspend fun updateLecture(serverUrl: String, token: String, id: String, payload: UpdateLectureRequest): LectureDto =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$id").patch(body).build()
+      executeJson<LectureEnvelope>(req).lecture
+    }
+
+  suspend fun deleteLecture(serverUrl: String, token: String, id: String) =
+    withContext(Dispatchers.IO) {
+      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$id").delete().build()
+      executeUnit(req)
+    }
+
+  suspend fun transcribeLectureAudio(
+    serverUrl: String,
+    token: String,
+    lectureId: String,
+    attachmentId: String,
+  ): String =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(TranscribeRequest(attachmentId)).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$lectureId/transcribe").post(body).build()
+      executeJson<TranscribeResponse>(req).transcript
+    }
+
+  suspend fun uploadAttachment(
+    serverUrl: String,
+    token: String,
+    parentType: String,
+    parentId: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+  ): AttachmentDto = withContext(Dispatchers.IO) {
+    if (bytes.size <= 4_000_000) {
+      val mediaType = runCatching { mimeType.toMediaType() }.getOrDefault("application/octet-stream".toMediaType())
+      val formBody = MultipartBody.Builder()
+        .setType(MultipartBody.FORM)
+        .addFormDataPart("${parentType}Id", parentId)
+        .addFormDataPart("file", fileName, bytes.toRequestBody(mediaType))
+        .build()
+      val req = authBuilder(serverUrl, token, "/api/mobile/files/upload").post(formBody).build()
+      return@withContext executeJson<AttachmentEnvelope>(req).attachment
+    }
+
+    // Large file (> 4 MB): direct Vercel Blob upload
+    val prepBody = json.encodeToString(
+      BlobPrepareRequest(
+        parentType = parentType,
+        parentId = parentId,
+        name = fileName,
+        size = bytes.size.toLong(),
+      ),
+    ).toRequestBody(jsonMediaType)
+    val prepReq = authBuilder(serverUrl, token, "/api/mobile/files/blob").post(prepBody).build()
+    val grant = executeJson<BlobGrantResponse>(prepReq)
+
+    val blobMedia = runCatching { grant.mimeType.toMediaType() }.getOrDefault("application/octet-stream".toMediaType())
+    val putReq = Request.Builder()
+      .url("https://blob.vercel-storage.com/${grant.pathname}")
+      .put(bytes.toRequestBody(blobMedia))
+      .header("Authorization", "Bearer ${grant.clientToken}")
+      .header("x-api-version", "7")
+      .header("x-content-type", grant.mimeType)
+      .header("x-add-random-suffix", "0")
+      .build()
+    executeUnit(putReq)
+
+    val regBody = json.encodeToString(BlobRegisterRequest(grant.uploadReceipt)).toRequestBody(jsonMediaType)
+    val regReq = authBuilder(serverUrl, token, "/api/mobile/files/register").post(regBody).build()
+    executeJson<AttachmentEnvelope>(regReq).attachment
+  }
+
+  suspend fun downloadAttachment(serverUrl: String, token: String, attachmentId: String, destFile: File) =
+    withContext(Dispatchers.IO) {
+      val req = authBuilder(serverUrl, token, "/api/mobile/files/$attachmentId").get().build()
+      client.newCall(req).execute().use { res ->
+        if (!res.isSuccessful) {
+          val text = res.body?.string().orEmpty()
+          val msg = runCatching { json.decodeFromString<ApiErrorResponse>(text).error }
+            .getOrDefault("Не удалось скачать файл (${res.code})")
+          throw ApiException(res.code, msg)
+        }
+        destFile.parentFile?.mkdirs()
+        val tmp = File(destFile.parentFile, "${destFile.name}.part")
+        res.body?.byteStream()?.use { input ->
+          tmp.outputStream().use { output -> input.copyTo(output) }
+        } ?: throw IOException("Пустой ответ от сервера")
+        if (destFile.exists()) destFile.delete()
+        tmp.renameTo(destFile)
+      }
+    }
+
+  suspend fun deleteAttachment(serverUrl: String, token: String, attachmentId: String) =
+    withContext(Dispatchers.IO) {
+      val req = authBuilder(serverUrl, token, "/api/mobile/files/$attachmentId").delete().build()
       executeUnit(req)
     }
 

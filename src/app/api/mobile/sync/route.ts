@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     -((new Date(mskStart.getTime() + 3 * 3_600_000).getUTCDay() + 6) % 7),
   );
 
-  const [subjects, tasks, rawEvents, calRawEvents, questions, notes, lectures, dueReviewCount] = await Promise.all([
+  const [subjects, tasks, rawEvents, calRawEvents, questions, notes, lectures, attachments, dueReviewCount] = await Promise.all([
     prisma.subject.findMany({
       where: { userId: user.id, archived: false, selfStudy: false },
       select: {
@@ -119,11 +119,29 @@ export async function GET(req: Request) {
         title: true,
         date: true,
         summary: true,
+        transcript: true,
         createdAt: true,
         updatedAt: true,
       },
       orderBy: [{ number: "desc" }, { date: "desc" }, { updatedAt: "desc" }],
       take: 500,
+    }),
+    prisma.attachment.findMany({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        originalName: true,
+        mimeType: true,
+        size: true,
+        subjectId: true,
+        taskId: true,
+        noteId: true,
+        lectureId: true,
+        questionId: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 1000,
     }),
     prisma.question.count({
       where: { userId: user.id, srsReps: { gt: 0 }, srsDue: { lte: now } },
@@ -236,8 +254,21 @@ export async function GET(req: Request) {
       title: l.title,
       date: l.date ? l.date.toISOString() : null,
       summary: l.summary,
+      transcript: l.transcript,
       createdAt: l.createdAt.toISOString(),
       updatedAt: l.updatedAt.toISOString(),
+    })),
+    attachments: attachments.map((a) => ({
+      id: a.id,
+      originalName: a.originalName,
+      mimeType: a.mimeType,
+      size: a.size,
+      subjectId: a.subjectId,
+      taskId: a.taskId,
+      noteId: a.noteId,
+      lectureId: a.lectureId,
+      questionId: a.questionId,
+      createdAt: a.createdAt.toISOString(),
     })),
     stats: {
       doneThisWeek,

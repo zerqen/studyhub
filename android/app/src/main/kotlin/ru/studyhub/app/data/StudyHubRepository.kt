@@ -1,6 +1,7 @@
 package ru.studyhub.app.data
 
 import android.content.Context
+import java.io.File
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
@@ -42,6 +43,9 @@ class StudyHubRepository(
     const val OP_CREATE_NOTE = "CREATE_NOTE"
     const val OP_UPDATE_NOTE = "UPDATE_NOTE"
     const val OP_DELETE_NOTE = "DELETE_NOTE"
+    const val OP_CREATE_LECTURE = "CREATE_LECTURE"
+    const val OP_UPDATE_LECTURE = "UPDATE_LECTURE"
+    const val OP_DELETE_LECTURE = "DELETE_LECTURE"
   }
 
   private val syncMutex = Mutex()
@@ -128,7 +132,7 @@ class StudyHubRepository(
           if (e.statusCode == 401 || e.statusCode == 403) {
             throw e
           }
-          if (e.statusCode == 404 && (op.opType == OP_DELETE_TASK || op.opType == OP_DELETE_SUBTASK || op.opType == OP_DELETE_NOTE)) {
+          if (e.statusCode == 404 && (op.opType == OP_DELETE_TASK || op.opType == OP_DELETE_SUBTASK || op.opType == OP_DELETE_NOTE || op.opType == OP_DELETE_LECTURE)) {
             withContext(Dispatchers.IO) { db.removePendingOp(op.id) }
           } else if (e.statusCode in 400..499) {
             // Drop invalid client op so queue doesn't block forever
@@ -150,6 +154,7 @@ class StudyHubRepository(
           questions = remote.questions,
           notes = remote.notes,
           lectures = remote.lectures,
+          attachments = remote.attachments,
         )
       }
       sessionStore.updateSyncMeta(remote.user, remote.stats, System.currentTimeMillis())
@@ -227,6 +232,21 @@ class StudyHubRepository(
         if (op.entityId.startsWith("local_note_")) return
         api.deleteNote(session.serverUrl, session.token, op.entityId)
       }
+      OP_CREATE_LECTURE -> {
+        val req = api.json.decodeFromString<CreateLectureRequest>(op.payloadJson)
+        val created = api.createLecture(session.serverUrl, session.token, req)
+        withContext(Dispatchers.IO) { db.remapLectureId(op.entityId, created) }
+      }
+      OP_UPDATE_LECTURE -> {
+        if (op.entityId.startsWith("local_lec_")) return
+        val req = api.json.decodeFromString<UpdateLectureRequest>(op.payloadJson)
+        val updated = api.updateLecture(session.serverUrl, session.token, op.entityId, req)
+        withContext(Dispatchers.IO) { db.upsertLecture(updated) }
+      }
+      OP_DELETE_LECTURE -> {
+        if (op.entityId.startsWith("local_lec_")) return
+        api.deleteLecture(session.serverUrl, session.token, op.entityId)
+      }
     }
   }
 
@@ -241,6 +261,27 @@ class StudyHubRepository(
         OP_UPDATE_TASK,
         taskId,
         api.json.encodeToString(UpdateTaskRequest(status = nextStatus)),
+      )
+    }
+    refreshFromDb()
+    notifyWidgets()
+    syncNow()
+  }
+
+  suspend fun postponeTaskToTomorrow(taskId: String) {
+    val existing = _snapshot.value.tasks.firstOrNull { it.id == taskId } ?: return
+    val tomorrowIso = DateHelpers.formatIsoDate(DateHelpers.today().plusDays(1))
+    val updated = existing.copy(
+      dueDate = tomorrowIso,
+      status = if (existing.status == "OVERDUE") "PLANNED" else existing.status,
+      updatedAt = Instant.now().toString(),
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertTask(updated)
+      db.enqueueOp(
+        OP_UPDATE_TASK,
+        taskId,
+        api.json.encodeToString(UpdateTaskRequest(dueDate = tomorrowIso, status = updated.status)),
       )
     }
     refreshFromDb()
@@ -529,6 +570,178 @@ class StudyHubRepository(
     }
     refreshFromDb()
     syncNow()
+  }
+
+  suspend fun createLecture(
+    subjectId: String,
+    title: String,
+    number: Int?,
+    date: String?,
+    summary: String,
+    transcript: String = "",
+  ): String {
+    val cleanTitle = title.trim().ifBlank { "Новая лекция" }
+    val nowIso = Instant.now().toString()
+    val localId = "local_lec_${UUID.randomUUID()}"
+    val resolvedNumber = number ?: ((_snapshot.value.lectures
+      .filter { it.subjectId == subjectId }
+      .mapNotNull { it.number }
+      .maxOrNull() ?: 0) + 1)
+    val lecture = LectureDto(
+      id = localId,
+      subjectId = subjectId,
+      number = resolvedNumber,
+      title = cleanTitle,
+      date = date,
+      summary = summary,
+      transcript = transcript,
+      createdAt = nowIso,
+      updatedAt = nowIso,
+    )
+    val req = CreateLectureRequest(
+      subjectId = subjectId,
+      title = cleanTitle,
+      number = resolvedNumber,
+      date = date,
+      summary = summary,
+      transcript = transcript,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertLecture(lecture)
+      db.enqueueOp(OP_CREATE_LECTURE, localId, api.json.encodeToString(req))
+    }
+    refreshFromDb()
+    syncNow()
+    return localId
+  }
+
+  suspend fun updateLecture(
+    lectureId: String,
+    title: String,
+    number: Int?,
+    date: String?,
+    summary: String,
+    transcript: String,
+  ) {
+    val existing = _snapshot.value.lectures.firstOrNull { it.id == lectureId } ?: return
+    val cleanTitle = title.trim().ifBlank { existing.title }
+    val updated = existing.copy(
+      title = cleanTitle,
+      number = number,
+      date = date,
+      summary = summary,
+      transcript = transcript,
+      updatedAt = Instant.now().toString(),
+    )
+    val req = UpdateLectureRequest(
+      title = updated.title,
+      number = updated.number,
+      date = updated.date,
+      summary = updated.summary,
+      transcript = updated.transcript,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertLecture(updated)
+      db.enqueueOp(OP_UPDATE_LECTURE, lectureId, api.json.encodeToString(req))
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  suspend fun deleteLecture(lectureId: String) {
+    withContext(Dispatchers.IO) {
+      db.deleteLectureLocal(lectureId)
+      db.enqueueOp(OP_DELETE_LECTURE, lectureId, "{}")
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  fun cachedFileFor(attachment: AttachmentDto): File {
+    val safeName = attachment.originalName.replace(Regex("[^\\p{L}\\p{N}._-]"), "_")
+    val dir = File(context.cacheDir, "attachments")
+    return File(dir, "${attachment.id}_$safeName")
+  }
+
+  fun isAttachmentCached(attachment: AttachmentDto): Boolean {
+    val f = cachedFileFor(attachment)
+    return f.exists() && f.length() > 0L
+  }
+
+  suspend fun openOrDownloadAttachment(attachment: AttachmentDto): Result<File> = runCatching {
+    val dest = cachedFileFor(attachment)
+    if (dest.exists() && dest.length() > 0L) return@runCatching dest
+    val session = sessionStore.current()
+    if (!session.isLoggedIn) throw IOException("Нужна авторизация")
+    api.downloadAttachment(session.serverUrl, session.token, attachment.id, dest)
+    dest
+  }
+
+  suspend fun uploadFileForLecture(
+    lectureId: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+  ): Result<AttachmentDto> = runCatching {
+    val session = sessionStore.current()
+    if (!session.isLoggedIn) throw IOException("Нужна авторизация")
+    var targetId = lectureId
+    if (targetId.startsWith("local_lec_")) {
+      syncNow().getOrThrow()
+      val matched = _snapshot.value.lectures.firstOrNull { !it.id.startsWith("local_lec_") }
+      if (matched == null || _snapshot.value.lectures.any { it.id == lectureId }) {
+        throw IOException("Сначала синхронизируйте лекцию с сервером")
+      }
+      targetId = matched.id
+    }
+    val uploaded = api.uploadAttachment(
+      serverUrl = session.serverUrl,
+      token = session.token,
+      parentType = "lecture",
+      parentId = targetId,
+      fileName = fileName,
+      mimeType = mimeType,
+      bytes = bytes,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertAttachment(uploaded)
+      val cacheDest = cachedFileFor(uploaded)
+      cacheDest.parentFile?.mkdirs()
+      cacheDest.writeBytes(bytes)
+    }
+    refreshFromDb()
+    uploaded
+  }
+
+  suspend fun deleteAttachment(attachmentId: String): Result<Unit> = runCatching {
+    val session = sessionStore.current()
+    if (!session.isLoggedIn) throw IOException("Нужна авторизация")
+    val existing = _snapshot.value.attachments.firstOrNull { it.id == attachmentId }
+    api.deleteAttachment(session.serverUrl, session.token, attachmentId)
+    withContext(Dispatchers.IO) {
+      db.deleteAttachmentLocal(attachmentId)
+      if (existing != null) cachedFileFor(existing).delete()
+    }
+    refreshFromDb()
+  }
+
+  suspend fun transcribeLectureAudio(lectureId: String, attachmentId: String): Result<String> = runCatching {
+    val session = sessionStore.current()
+    if (!session.isLoggedIn) throw IOException("Нужна авторизация")
+    val nextTranscript = api.transcribeLectureAudio(
+      serverUrl = session.serverUrl,
+      token = session.token,
+      lectureId = lectureId,
+      attachmentId = attachmentId,
+    )
+    val existing = _snapshot.value.lectures.firstOrNull { it.id == lectureId }
+    if (existing != null) {
+      withContext(Dispatchers.IO) {
+        db.upsertLecture(existing.copy(transcript = nextTranscript, updatedAt = Instant.now().toString()))
+      }
+      refreshFromDb()
+    }
+    nextTranscript
   }
 
   private fun normalizeUrl(raw: String): String {
