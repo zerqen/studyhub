@@ -1,10 +1,13 @@
 package ru.studyhub.app
 
 import java.time.Instant
+import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import ru.studyhub.app.data.QuestionDto
 import ru.studyhub.app.data.SrsEngine
 import ru.studyhub.app.data.SrsState
 
@@ -82,5 +85,71 @@ class SrsEngineTest {
     assertFalse(SrsEngine.isLessonKind("EXAM"))
     assertFalse(SrsEngine.isLessonKind("OTHER"))
     assertFalse(SrsEngine.isLessonKind(null))
+  }
+
+  @Test
+  fun pickWeakestPrioritizesLapsedAndSkipsProblemsOrEmptyAnswers() {
+    val now = Instant.parse("2026-11-25T10:00:00Z")
+    val strong = QuestionDto(
+      id = "strong",
+      subjectId = "s1",
+      text = "Strong",
+      answer = "Ans",
+      status = "LEARNED",
+      srsInterval = 30,
+      srsEase = 2.6,
+      srsReps = 4,
+      srsDue = "2026-12-20T00:00:00Z",
+    )
+    val weak = QuestionDto(
+      id = "weak",
+      subjectId = "s1",
+      text = "Weak",
+      answer = "Ans",
+      status = "REVIEW",
+      srsLapses = 2,
+      srsInterval = 0,
+      srsEase = 1.8,
+      srsReps = 0,
+      srsDue = "2026-11-24T00:00:00Z",
+    )
+    val problem = QuestionDto(
+      id = "prob",
+      subjectId = "s1",
+      text = "Problem",
+      answer = "Ans",
+      kind = "PROBLEM",
+    )
+    val noAns = QuestionDto(
+      id = "noans",
+      subjectId = "s1",
+      text = "NoAns",
+      answer = "   ",
+    )
+
+    val picked = SrsEngine.pickWeakest(listOf(strong, problem, noAns, weak), limit = 10, now = now)
+    assertEquals(listOf("weak", "strong"), picked.map { it.id })
+  }
+
+  @Test
+  fun drawExamTicketGroupsByTicketNoOrPicksRandomTheoryAndProblem() {
+    val byTicketQuestions = listOf(
+      QuestionDto(id = "q1", subjectId = "s1", text = "Q1", ticketNo = 5, sortOrder = 1),
+      QuestionDto(id = "q2", subjectId = "s1", text = "Q2", ticketNo = 5, sortOrder = 2),
+    )
+    val ticket = SrsEngine.drawExamTicket(byTicketQuestions, "Матан", Random(1))
+    assertNotNull(ticket)
+    assertEquals("Билет №5", ticket!!.title)
+    assertEquals(listOf("q1", "q2"), ticket.items.map { it.id })
+
+    val mixed = listOf(
+      QuestionDto(id = "t1", subjectId = "s1", text = "T1", kind = "THEORY"),
+      QuestionDto(id = "t2", subjectId = "s1", text = "T2", kind = "THEORY"),
+      QuestionDto(id = "p1", subjectId = "s1", text = "P1", kind = "PROBLEM"),
+    )
+    val randomTicket = SrsEngine.drawExamTicket(mixed, "Физика", Random(1))
+    assertNotNull(randomTicket)
+    assertEquals("Случайный билет", randomTicket!!.title)
+    assertEquals(3, randomTicket.items.size)
   }
 }

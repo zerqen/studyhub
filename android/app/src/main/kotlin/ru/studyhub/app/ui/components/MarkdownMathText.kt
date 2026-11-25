@@ -288,6 +288,45 @@ private fun parseMarkdownBlocks(raw: String): List<MdBlock> {
 }
 
 private val inlineTokenRegex = Regex("(\\*\\*[^*]+\\*\\*|\\*[^*\\n]+\\*|`[^`\\n]+`|\\$[^$\\n]+\\$)")
+private val mathOnlyRegex = Regex("(\\$[^$\\n]+\\$|`[^`\\n]+`)")
+
+private fun AnnotatedString.Builder.appendFormattedSegment(
+  text: String,
+  accentColor: androidx.compose.ui.graphics.Color,
+  codeBgColor: androidx.compose.ui.graphics.Color,
+) {
+  var cursor = 0
+  for (m in mathOnlyRegex.findAll(text)) {
+    if (m.range.first > cursor) {
+      append(text.substring(cursor, m.range.first))
+    }
+    val token = m.value
+    when {
+      token.startsWith("`") && token.endsWith("`") -> {
+        withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBgColor)) {
+          append(" ${token.substring(1, token.length - 1)} ")
+        }
+      }
+      token.startsWith("$") && token.endsWith("$") -> {
+        val formatted = MathFormatter.formatLatex(token.substring(1, token.length - 1))
+        withStyle(
+          SpanStyle(
+            fontFamily = FontFamily.Serif,
+            fontStyle = FontStyle.Italic,
+            color = accentColor,
+          ),
+        ) {
+          append(formatted)
+        }
+      }
+      else -> append(token)
+    }
+    cursor = m.range.last + 1
+  }
+  if (cursor < text.length) {
+    append(text.substring(cursor))
+  }
+}
 
 private fun renderInline(
   text: String,
@@ -304,12 +343,12 @@ private fun renderInline(
       when {
         token.startsWith("**") && token.endsWith("**") -> {
           withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-            append(token.substring(2, token.length - 2))
+            appendFormattedSegment(token.substring(2, token.length - 2), accentColor, codeBgColor)
           }
         }
         token.startsWith("*") && token.endsWith("*") -> {
           withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-            append(token.substring(1, token.length - 1))
+            appendFormattedSegment(token.substring(1, token.length - 1), accentColor, codeBgColor)
           }
         }
         token.startsWith("`") && token.endsWith("`") -> {

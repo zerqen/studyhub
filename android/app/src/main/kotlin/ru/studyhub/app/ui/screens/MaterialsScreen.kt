@@ -74,6 +74,7 @@ import ru.studyhub.app.data.QuestionDto
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.SubjectDto
 import ru.studyhub.app.data.TaskDto
+import ru.studyhub.app.ui.components.KaTeXMarkdownView
 import ru.studyhub.app.ui.components.MarkdownMathText
 import ru.studyhub.app.ui.components.StudyCard
 import ru.studyhub.app.ui.components.SyncStatusPill
@@ -707,7 +708,7 @@ fun ExpandableQuestionCard(question: QuestionDto) {
       if (expanded) {
         HorizontalDivider(color = colors.line)
         if (!question.answer.isNullOrBlank()) {
-          MarkdownMathText(markdown = question.answer, baseStyle = MaterialTheme.typography.bodyMedium)
+          KaTeXMarkdownView(markdown = question.answer, textSizeSp = 15)
         } else {
           Text("Ответ не заполнен", style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         }
@@ -719,9 +720,10 @@ fun ExpandableQuestionCard(question: QuestionDto) {
               .background(colors.subtle)
               .padding(10.dp),
           ) {
-            MarkdownMathText(
+            KaTeXMarkdownView(
               markdown = question.explanation,
-              baseStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.muted),
+              textSizeSp = 14,
+              mutedText = true,
             )
           }
         }
@@ -788,7 +790,7 @@ fun LectureReaderSheet(
           color = colors.muted,
         )
       } else {
-        MarkdownMathText(markdown = lecture.summary, baseStyle = MaterialTheme.typography.bodyLarge)
+        KaTeXMarkdownView(markdown = lecture.summary, textSizeSp = 15)
       }
 
       Spacer(modifier = Modifier.height(16.dp))
@@ -873,7 +875,7 @@ fun NoteEditorSheet(
         if (content.isBlank()) {
           Text("Текст заметки пуст", style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         } else {
-          MarkdownMathText(markdown = content, baseStyle = MaterialTheme.typography.bodyLarge)
+          KaTeXMarkdownView(markdown = content, textSizeSp = 15)
         }
       } else {
         OutlinedTextField(

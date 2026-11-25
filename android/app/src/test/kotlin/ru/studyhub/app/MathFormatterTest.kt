@@ -9,7 +9,7 @@ import ru.studyhub.app.data.MathFormatter
 class MathFormatterTest {
 
   @Test
-  fun formatsGreekLettersFractionsRootsAndPowers() {
+  fun formatsGreekLettersFractionsRootsAndPowersWithoutTofu() {
     assertEquals("α + β = γ", MathFormatter.formatLatex("\\alpha + \\beta = \\gamma"))
     assertEquals("a/b", MathFormatter.formatLatex("\\frac{a}{b}"))
     assertEquals("(x + 1)/2", MathFormatter.formatLatex("\\frac{x + 1}{2}"))
@@ -18,9 +18,10 @@ class MathFormatterTest {
   }
 
   @Test
-  fun formatsSubscriptsAndCommonCalculusSymbols() {
-    assertEquals("aₙ → ∞", MathFormatter.formatLatex("a_n \\to \\infty"))
-    assertEquals("∑ᵢ₌₁ⁿ i", MathFormatter.formatLatex("\\sum_{i=1}^{n} i"))
+  fun formatsCalculusAndMatricesCleanlyWithoutMissingSubscriptGlyphs() {
+    assertEquals("a_n → ∞", MathFormatter.formatLatex("a_n \\to \\infty"))
+    assertEquals("a_ij", MathFormatter.formatLatex("a_{ij}"))
+    assertEquals("det A = [a b; c d]", MathFormatter.formatLatex("\\det A = \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}"))
     assertEquals("∂f/∂x ≥ 0", MathFormatter.formatLatex("\\frac{\\partial f}{\\partial x} \\geq 0"))
   }
 
@@ -33,7 +34,7 @@ class MathFormatterTest {
     """.trimIndent()
     val preview = MathFormatter.plainPreview(md)
     assertTrue(preview.contains("Интегралы"))
-    assertTrue(preview.contains("∫₀¹ x² dx = 1/3"))
+    assertTrue(preview.contains("∫_0¹ x² dx = 1/3"))
     assertFalse(preview.contains("**"))
     assertFalse(preview.contains("#"))
   }
