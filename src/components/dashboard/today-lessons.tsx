@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BookMarked, MapPin } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BookMarked, Eye, EyeOff, MapPin } from "lucide-react";
 import { kindMeta } from "@/lib/schedule";
 import { isAssignedAt, isDueAt } from "@/lib/homework";
 import { Modal } from "../ui/modal";
 import { HomeworkPanel, type HomeworkTask } from "../calendar/homework-panel";
+
+const HIDE_LESSONS_KEY = "studyhub:hide-lessons";
 
 export type TodayLesson = {
   key: string;
@@ -25,6 +27,17 @@ const time = (iso: string) => new Intl.DateTimeFormat("ru-RU", { hour: "2-digit"
 /** Пары на сегодня. Тап по паре — домашка: что сдать и «Задали ДЗ». */
 export function TodayLessons({ lessons, homework }: { lessons: TodayLesson[]; homework: Homework[] }) {
   const [open, setOpen] = useState<TodayLesson | null>(null);
+  const [hideLessons, setHideLessons] = useState(false);
+
+  useEffect(() => {
+    setHideLessons(localStorage.getItem(HIDE_LESSONS_KEY) === "1");
+  }, []);
+
+  function toggleHide(next: boolean) {
+    setHideLessons(next);
+    localStorage.setItem(HIDE_LESSONS_KEY, next ? "1" : "0");
+  }
+
   const withHw = useMemo(
     () =>
       lessons.map((l) => {
@@ -32,7 +45,7 @@ export function TodayLessons({ lessons, homework }: { lessons: TodayLesson[]; ho
         return {
           ...l,
           due: homework.filter((t) => isDueAt(t, lesson)),
-          assigned: homework.filter((t) => isAssignedAt(t, lesson)),
+          assigned: homework.filter((t) => isAssignedAt({ subjectId: t.subjectId, lessonAt: t.lessonAt ?? null }, lesson)),
         };
       }),
     [lessons, homework],
@@ -40,8 +53,36 @@ export function TodayLessons({ lessons, homework }: { lessons: TodayLesson[]; ho
   const current = open ? withHw.find((l) => l.key === open.key) : null;
   const canHomework = (l: TodayLesson) => Boolean(l.subjectId) && !["EXAM", "CONSULT"].includes(l.kind);
 
+  if (hideLessons) {
+    return (
+      <section aria-labelledby="today-title" className="card flex items-center justify-between rounded-[14px] px-4 py-2.5 text-xs text-muted">
+        <span id="today-title">Пары скрыты</span>
+        <button
+          type="button"
+          onClick={() => toggleHide(false)}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-accent transition-colors hover:bg-subtle"
+        >
+          <Eye className="h-3.5 w-3.5" /> Показать
+        </button>
+      </section>
+    );
+  }
+
   return (
-    <>
+    <section aria-labelledby="today-title" className="card rounded-[14px] p-1.5">
+      <div className="flex items-center justify-between gap-2 px-3 pb-1 pt-2.5">
+        <h2 id="today-title" className="heading text-base">
+          Сегодня по расписанию
+        </h2>
+        <button
+          type="button"
+          onClick={() => toggleHide(true)}
+          title="Скрыть пары"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-subtle hover:text-fg"
+        >
+          <EyeOff className="h-3.5 w-3.5" /> Скрыть
+        </button>
+      </div>
       <ul>
         {withHw.map((e) => {
           const meta = kindMeta(e.kind);
@@ -92,6 +133,6 @@ export function TodayLessons({ lessons, homework }: { lessons: TodayLesson[]; ho
           />
         ) : null}
       </Modal>
-    </>
+    </section>
   );
 }

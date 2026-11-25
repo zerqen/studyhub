@@ -20,8 +20,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -42,6 +44,7 @@ fun SettingsScreen(
   snapshot: StudyHubSnapshot,
   onSyncNow: () -> Unit,
   onThemeChange: (String) -> Unit,
+  onShowLessonsChange: (Boolean) -> Unit,
   onLogout: () -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
@@ -88,7 +91,7 @@ fun SettingsScreen(
             color = colors.muted,
           )
           Text(
-            text = "В кеше: ${snapshot.tasks.size} задач, ${snapshot.subjects.size} предметов · Очередь оффлайн-изменений: ${snapshot.pendingOpsCount}",
+            text = "В кеше: ${snapshot.tasks.size} задач, ${snapshot.questions.size} карточек, ${snapshot.subjects.size} предметов · Очередь: ${snapshot.pendingOpsCount}",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.fg,
           )
@@ -144,11 +147,11 @@ fun SettingsScreen(
       }
     }
 
-    // Theme selector
+    // Theme & Calendar selector
     item {
       StudyCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Text("Оформление", style = MaterialTheme.typography.titleLarge, color = colors.fg)
+          Text("Оформление и расписание", style = MaterialTheme.typography.titleLarge, color = colors.fg)
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
               selected = session.themeMode == "system",
@@ -164,6 +167,25 @@ fun SettingsScreen(
               selected = session.themeMode == "dark",
               onClick = { onThemeChange("dark") },
               label = { Text("Тёмная") },
+            )
+          }
+          HorizontalDivider(color = colors.line)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text("Показывать пары", style = MaterialTheme.typography.bodyLarge, color = colors.fg)
+              Text(
+                text = "По умолчанию пары скрыты на главной и в календаре",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.muted,
+              )
+            }
+            Switch(
+              checked = session.showLessons,
+              onCheckedChange = onShowLessonsChange,
             )
           }
         }

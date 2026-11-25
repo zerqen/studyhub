@@ -71,6 +71,7 @@ import ru.studyhub.app.ui.theme.StudyHubThemeColors
 @Composable
 fun CreateTaskSheet(
   subjects: List<SubjectDto>,
+  initialDueDate: LocalDate? = DateHelpers.today().plusDays(1),
   onDismiss: () -> Unit,
   onCreate: (
     title: String,
@@ -89,7 +90,7 @@ fun CreateTaskSheet(
   var description by remember { mutableStateOf("") }
   var kind by remember { mutableStateOf(TaskKind.HOMEWORK) }
   var subjectId by remember { mutableStateOf<String?>(null) }
-  var dueDate by remember { mutableStateOf<LocalDate?>(DateHelpers.today().plusDays(1)) }
+  var dueDate by remember(initialDueDate) { mutableStateOf(initialDueDate) }
   var dueTime by remember { mutableStateOf("") }
   var priority by remember { mutableStateOf(TaskPriority.MEDIUM) }
   var includeTemplateStages by remember { mutableStateOf(false) }

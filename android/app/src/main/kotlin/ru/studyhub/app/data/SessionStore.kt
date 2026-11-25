@@ -1,6 +1,7 @@
 package ru.studyhub.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -23,6 +24,7 @@ class SessionStore(private val context: Context) {
     private val KEY_DONE_WEEK = intPreferencesKey("done_this_week")
     private val KEY_DUE_REVIEW = intPreferencesKey("due_review_count")
     private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+    private val KEY_SHOW_LESSONS = booleanPreferencesKey("show_lessons")
   }
 
   val sessionFlow: Flow<AuthSession> = context.sessionDataStore.data.map { p ->
@@ -36,6 +38,7 @@ class SessionStore(private val context: Context) {
       doneThisWeek = p[KEY_DONE_WEEK] ?: 0,
       dueReviewCount = p[KEY_DUE_REVIEW] ?: 0,
       themeMode = p[KEY_THEME_MODE] ?: "system",
+      showLessons = p[KEY_SHOW_LESSONS] ?: false,
     )
   }
 
@@ -68,13 +71,21 @@ class SessionStore(private val context: Context) {
     }
   }
 
+  suspend fun setShowLessons(show: Boolean) {
+    context.sessionDataStore.edit { p ->
+      p[KEY_SHOW_LESSONS] = show
+    }
+  }
+
   suspend fun clearAuth() {
     context.sessionDataStore.edit { p ->
       val savedUrl = p[KEY_SERVER_URL].orEmpty()
       val savedTheme = p[KEY_THEME_MODE] ?: "system"
+      val savedShowLessons = p[KEY_SHOW_LESSONS] ?: false
       p.clear()
       if (savedUrl.isNotBlank()) p[KEY_SERVER_URL] = savedUrl
       p[KEY_THEME_MODE] = savedTheme
+      p[KEY_SHOW_LESSONS] = savedShowLessons
     }
   }
 }

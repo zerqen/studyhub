@@ -86,6 +86,18 @@ class StudyHubApi {
       executeUnit(req)
     }
 
+  suspend fun reviewQuestion(
+    serverUrl: String,
+    token: String,
+    questionId: String,
+    grade: Int,
+  ): ReviewResponse =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(ReviewRequest(questionId, grade)).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/review").post(body).build()
+      executeJson(req)
+    }
+
   private fun authBuilder(serverUrl: String, token: String, path: String): Request.Builder {
     val cleanBase = serverUrl.trim().trimEnd('/')
     return Request.Builder()

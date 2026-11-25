@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { ru } from "date-fns/locale";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, ChevronLeft, ChevronRight, FileUp, GraduationCap, MapPin, Plus } from "lucide-react";
@@ -24,7 +24,7 @@ import { Modal } from "../ui/modal";
 import { TaskForm } from "../tasks/task-form";
 import { EventForm, type EditableEvent } from "./event-form";
 import { ScheduleImport } from "./schedule-import";
-import { expandEvents, kindMeta, weekParity } from "@/lib/schedule";
+import { expandEvents, isLessonKind, kindMeta, weekParity } from "@/lib/schedule";
 import { isAssignedAt, isDueAt } from "@/lib/homework";
 import { HomeworkPanel } from "./homework-panel";
 import { taskKind } from "@/lib/task-kinds";
@@ -94,8 +94,18 @@ export function CalendarApp({
   const [moved, setMoved] = useState<Record<string, string>>({});
   const [doneOver, setDoneOver] = useState<Record<string, boolean>>({});
   const [showDone, setShowDone] = useState(true);
+  const [hideLessons, setHideLessons] = useState(false);
   const toast = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    setHideLessons(localStorage.getItem("studyhub:hide-lessons") === "1");
+  }, []);
+
+  function toggleHideLessons(next: boolean) {
+    setHideLessons(next);
+    localStorage.setItem("studyhub:hide-lessons", next ? "1" : "0");
+  }
   const homework = useMemo(() => tasks.filter((t) => t.kind === "HOMEWORK" && t.status !== "CANCELLED"), [tasks]);
 
   const days = useMemo(() => {
@@ -144,6 +154,7 @@ export function CalendarApp({
     const from = days[0];
     const to = addDays(days[days.length - 1], 1);
     for (const e of expandEvents(events, from, to)) {
+      if (hideLessons && isLessonKind(e.kind)) continue;
       if (subjectFilter && e.subjectId !== subjectFilter) continue;
       const meta = kindMeta(e.kind);
       const hw = homework.filter((t) => t.status !== "DONE" && isDueAt(t, e)).length;
@@ -162,7 +173,7 @@ export function CalendarApp({
     }
     for (const list of map.values()) list.sort((a, b) => a.sort - b.sort);
     return map;
-  }, [tasks, exams, events, subjectFilter, moved, days, homework, doneOver, showDone]);
+  }, [tasks, exams, events, subjectFilter, moved, days, homework, doneOver, showDone, hideLessons]);
 
   const openHomework = useMemo(() => {
     const e = eventOpen?.event;
@@ -318,10 +329,16 @@ export function CalendarApp({
             );
           })}
         </div>
-        <label className="ml-auto flex items-center gap-1.5 text-[13px] text-[#424655] dark:text-muted">
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
-          Показывать сделанное
-        </label>
+        <div className="ml-auto flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-1.5 text-[13px] text-[#424655] dark:text-muted">
+            <input type="checkbox" checked={hideLessons} onChange={(e) => toggleHideLessons(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+            Скрыть пары
+          </label>
+          <label className="flex items-center gap-1.5 text-[13px] text-[#424655] dark:text-muted">
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} className="h-4 w-4 accent-[rgb(var(--accent))]" />
+            Показывать сделанное
+          </label>
+        </div>
       </div>
 
       <div className="grid items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_300px]">

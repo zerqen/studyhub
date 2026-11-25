@@ -7,12 +7,13 @@ import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
 
 /**
- * Local SQLite database powering full offline mode and the home-screen Deadlines widget.
+ * Local SQLite database powering full offline mode, SRS flashcards, Calendar,
+ * and the home-screen Deadlines widget.
  */
 class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
   companion object {
     private const val DB_NAME = "studyhub_offline.db"
-    private const val DB_VERSION = 1
+    private const val DB_VERSION = 2
   }
 
   override fun onCreate(db: SQLiteDatabase) {
@@ -94,15 +95,57 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       )
       """.trimIndent(),
     )
+    createV2Tables(db)
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-    db.execSQL("DROP TABLE IF EXISTS subjects")
-    db.execSQL("DROP TABLE IF EXISTS tasks")
-    db.execSQL("DROP TABLE IF EXISTS subtasks")
-    db.execSQL("DROP TABLE IF EXISTS today_events")
-    db.execSQL("DROP TABLE IF EXISTS pending_ops")
-    onCreate(db)
+    if (oldVersion < 2) {
+      createV2Tables(db)
+    }
+  }
+
+  private fun createV2Tables(db: SQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS calendar_events (
+        event_key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        kind_label TEXT NOT NULL,
+        start_iso TEXT NOT NULL,
+        end_iso TEXT,
+        all_day INTEGER NOT NULL DEFAULT 0,
+        location TEXT,
+        color TEXT NOT NULL,
+        subject_id TEXT,
+        subject_name TEXT
+      )
+      """.trimIndent(),
+    )
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS questions (
+        id TEXT PRIMARY KEY,
+        subject_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        answer TEXT,
+        explanation TEXT,
+        status TEXT NOT NULL,
+        difficulty TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        ticket_no INTEGER,
+        ticket_title TEXT,
+        lecture_title TEXT,
+        srs_due TEXT,
+        srs_interval INTEGER NOT NULL DEFAULT 0,
+        srs_ease REAL NOT NULL DEFAULT 2.5,
+        srs_reps INTEGER NOT NULL DEFAULT 0,
+        srs_lapses INTEGER NOT NULL DEFAULT 0,
+        sort_order INTEGER NOT NULL DEFAULT 0
+      )
+      """.trimIndent(),
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject_id)")
   }
 
   @Synchronized
@@ -175,9 +218,62 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       }
     }
 
+    val events = readEventsTable(db, "today_events")
+    val calendarEvents = readEventsTable(db, "calendar_events")
+
+    val questions = mutableListOf<QuestionDto>()
+    db.rawQuery(
+      """
+      SELECT id, subject_id, text, answer, explanation, status, difficulty, kind,
+             ticket_no, ticket_title, lecture_title, srs_due, srs_interval,
+             srs_ease, srs_reps, srs_lapses, sort_order
+      FROM questions
+      ORDER BY sort_order ASC
+      """.trimIndent(),
+      null,
+    ).use { c ->
+      while (c.moveToNext()) {
+        questions += QuestionDto(
+          id = c.getString(0),
+          subjectId = c.getString(1),
+          text = c.getString(2),
+          answer = c.getString(3),
+          explanation = c.getString(4),
+          status = c.getString(5),
+          difficulty = c.getString(6),
+          kind = c.getString(7),
+          ticketNo = if (c.isNull(8)) null else c.getInt(8),
+          ticketTitle = c.getString(9),
+          lectureTitle = c.getString(10),
+          srsDue = c.getString(11),
+          srsInterval = c.getInt(12),
+          srsEase = c.getDouble(13),
+          srsReps = c.getInt(14),
+          srsLapses = c.getInt(15),
+          sortOrder = c.getInt(16),
+        )
+      }
+    }
+
+    var pendingCount = 0
+    db.rawQuery("SELECT COUNT(*) FROM pending_ops", null).use { c ->
+      if (c.moveToFirst()) pendingCount = c.getInt(0)
+    }
+
+    return StudyHubSnapshot(
+      subjects = subjects,
+      tasks = tasks,
+      todayEvents = events,
+      calendarEvents = calendarEvents,
+      questions = questions,
+      pendingOpsCount = pendingCount,
+    )
+  }
+
+  private fun readEventsTable(db: SQLiteDatabase, table: String): List<TodayEventDto> {
     val events = mutableListOf<TodayEventDto>()
     db.rawQuery(
-      "SELECT event_key, title, kind, kind_label, start_iso, end_iso, all_day, location, color, subject_id, subject_name FROM today_events ORDER BY start_iso ASC",
+      "SELECT event_key, title, kind, kind_label, start_iso, end_iso, all_day, location, color, subject_id, subject_name FROM $table ORDER BY start_iso ASC",
       null,
     ).use { c ->
       while (c.moveToNext()) {
@@ -196,18 +292,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         )
       }
     }
-
-    var pendingCount = 0
-    db.rawQuery("SELECT COUNT(*) FROM pending_ops", null).use { c ->
-      if (c.moveToFirst()) pendingCount = c.getInt(0)
-    }
-
-    return StudyHubSnapshot(
-      subjects = subjects,
-      tasks = tasks,
-      todayEvents = events,
-      pendingOpsCount = pendingCount,
-    )
+    return events
   }
 
   @Synchronized
@@ -215,6 +300,8 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
     subjects: List<SubjectDto>,
     tasks: List<TaskDto>,
     todayEvents: List<TodayEventDto>,
+    calendarEvents: List<TodayEventDto>,
+    questions: List<QuestionDto>,
   ) {
     writableDatabase.transaction {
       delete("subjects", null, null)
@@ -245,26 +332,43 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         }
       }
 
-      delete("today_events", null, null)
-      for (e in todayEvents) {
-        insert(
-          "today_events",
-          null,
-          ContentValues().apply {
-            put("event_key", e.key)
-            put("title", e.title)
-            put("kind", e.kind)
-            put("kind_label", e.kindLabel)
-            put("start_iso", e.start)
-            put("end_iso", e.end)
-            put("all_day", if (e.allDay) 1 else 0)
-            put("location", e.location)
-            put("color", e.color)
-            put("subject_id", e.subjectId)
-            put("subject_name", e.subjectName)
-          },
-        )
+      writeEventsTable(this, "today_events", todayEvents)
+      writeEventsTable(this, "calendar_events", calendarEvents)
+
+      delete("questions", null, null)
+      for (q in questions) {
+        insertQuestionRow(this, q)
       }
+    }
+  }
+
+  private fun writeEventsTable(db: SQLiteDatabase, table: String, events: List<TodayEventDto>) {
+    db.delete(table, null, null)
+    for (e in events) {
+      db.insert(
+        table,
+        null,
+        ContentValues().apply {
+          put("event_key", e.key)
+          put("title", e.title)
+          put("kind", e.kind)
+          put("kind_label", e.kindLabel)
+          put("start_iso", e.start)
+          put("end_iso", e.end)
+          put("all_day", if (e.allDay) 1 else 0)
+          put("location", e.location)
+          put("color", e.color)
+          put("subject_id", e.subjectId)
+          put("subject_name", e.subjectName)
+        },
+      )
+    }
+  }
+
+  @Synchronized
+  fun upsertQuestion(q: QuestionDto) {
+    writableDatabase.transaction {
+      insertQuestionRow(this, q)
     }
   }
 
@@ -367,6 +471,8 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       delete("tasks", null, null)
       delete("subtasks", null, null)
       delete("today_events", null, null)
+      delete("calendar_events", null, null)
+      delete("questions", null, null)
       delete("pending_ops", null, null)
     }
   }
@@ -408,6 +514,33 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         put("note", st.note)
         put("sort_order", st.sortOrder)
         put("updated_at", st.updatedAt)
+      },
+      SQLiteDatabase.CONFLICT_REPLACE,
+    )
+  }
+
+  private fun insertQuestionRow(db: SQLiteDatabase, q: QuestionDto) {
+    db.insertWithOnConflict(
+      "questions",
+      null,
+      ContentValues().apply {
+        put("id", q.id)
+        put("subject_id", q.subjectId)
+        put("text", q.text)
+        put("answer", q.answer)
+        put("explanation", q.explanation)
+        put("status", q.status)
+        put("difficulty", q.difficulty)
+        put("kind", q.kind)
+        if (q.ticketNo != null) put("ticket_no", q.ticketNo) else putNull("ticket_no")
+        put("ticket_title", q.ticketTitle)
+        put("lecture_title", q.lectureTitle)
+        put("srs_due", q.srsDue)
+        put("srs_interval", q.srsInterval)
+        put("srs_ease", q.srsEase)
+        put("srs_reps", q.srsReps)
+        put("srs_lapses", q.srsLapses)
+        put("sort_order", q.sortOrder)
       },
       SQLiteDatabase.CONFLICT_REPLACE,
     )

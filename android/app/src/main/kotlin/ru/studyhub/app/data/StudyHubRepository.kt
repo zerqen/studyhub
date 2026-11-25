@@ -35,6 +35,7 @@ class StudyHubRepository(
     const val OP_CREATE_SUBTASK = "CREATE_SUBTASK"
     const val OP_UPDATE_SUBTASK = "UPDATE_SUBTASK"
     const val OP_DELETE_SUBTASK = "DELETE_SUBTASK"
+    const val OP_REVIEW_QUESTION = "REVIEW_QUESTION"
   }
 
   private val syncMutex = Mutex()
@@ -73,6 +74,10 @@ class StudyHubRepository(
     sessionStore.setThemeMode(mode)
   }
 
+  suspend fun setShowLessons(show: Boolean) {
+    sessionStore.setShowLessons(show)
+  }
+
   suspend fun syncNow(): Result<Unit> = syncMutex.withLock {
     val session = sessionStore.current()
     if (!session.isLoggedIn) return Result.success(Unit)
@@ -103,7 +108,13 @@ class StudyHubRepository(
       // 2. Pull fresh snapshot from server
       val remote = api.sync(session.serverUrl, session.token)
       withContext(Dispatchers.IO) {
-        db.replaceServerSnapshot(remote.subjects, remote.tasks, remote.todayEvents)
+        db.replaceServerSnapshot(
+          subjects = remote.subjects,
+          tasks = remote.tasks,
+          todayEvents = remote.todayEvents,
+          calendarEvents = remote.calendarEvents,
+          questions = remote.questions,
+        )
       }
       sessionStore.updateSyncMeta(remote.user, remote.stats, System.currentTimeMillis())
       _snapshot.value = withContext(Dispatchers.IO) { db.readSnapshot() }.copy(isSyncing = false, lastError = null)
@@ -160,6 +171,10 @@ class StudyHubRepository(
       OP_DELETE_SUBTASK -> {
         if (op.entityId.startsWith("local_")) return
         api.deleteSubtask(session.serverUrl, session.token, op.entityId)
+      }
+      OP_REVIEW_QUESTION -> {
+        val req = api.json.decodeFromString<ReviewRequest>(op.payloadJson)
+        api.reviewQuestion(session.serverUrl, session.token, req.questionId, req.grade)
       }
     }
   }
@@ -339,6 +354,38 @@ class StudyHubRepository(
     withContext(Dispatchers.IO) {
       db.deleteSubtaskLocal(subtaskId)
       db.enqueueOp(OP_DELETE_SUBTASK, subtaskId, "{}")
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  suspend fun reviewQuestion(questionId: String, grade: Int) {
+    val existing = _snapshot.value.questions.firstOrNull { it.id == questionId } ?: return
+    val clampedGrade = grade.coerceIn(0, 3)
+    val prev = SrsState(
+      interval = existing.srsInterval,
+      ease = existing.srsEase,
+      reps = existing.srsReps,
+      lapses = existing.srsLapses,
+    )
+    val next = SrsEngine.schedule(prev, clampedGrade)
+    val due = SrsEngine.dueDate(next)
+    val nextStatus = SrsEngine.statusFor(next, clampedGrade)
+    val updated = existing.copy(
+      status = nextStatus,
+      srsDue = due.toString(),
+      srsInterval = next.interval,
+      srsEase = next.ease,
+      srsReps = next.reps,
+      srsLapses = next.lapses,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertQuestion(updated)
+      db.enqueueOp(
+        OP_REVIEW_QUESTION,
+        questionId,
+        api.json.encodeToString(ReviewRequest(questionId, clampedGrade)),
+      )
     }
     refreshFromDb()
     syncNow()

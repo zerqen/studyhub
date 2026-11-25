@@ -81,6 +81,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     viewModelScope.launch { repo.setThemeMode(mode) }
   }
 
+  fun setShowLessons(show: Boolean) {
+    viewModelScope.launch { repo.setShowLessons(show) }
+  }
+
+  fun reviewQuestion(questionId: String, grade: Int) {
+    viewModelScope.launch { repo.reviewQuestion(questionId, grade) }
+  }
+
   fun toggleTaskDone(taskId: String) {
     viewModelScope.launch { repo.toggleTaskDone(taskId) }
   }

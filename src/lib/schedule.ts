@@ -10,6 +10,12 @@ export const EVENT_KINDS = [
 
 export type EventKind = (typeof EVENT_KINDS)[number]["value"];
 
+export const LESSON_KINDS = new Set<string>(["LECTURE", "SEMINAR", "LAB", "CONSULT"]);
+
+export function isLessonKind(kind?: string | null): boolean {
+  return Boolean(kind && LESSON_KINDS.has(kind));
+}
+
 export function kindMeta(kind?: string | null) {
   return EVENT_KINDS.find((k) => k.value === kind) ?? EVENT_KINDS[EVENT_KINDS.length - 1];
 }

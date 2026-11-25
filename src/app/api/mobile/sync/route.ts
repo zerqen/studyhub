@@ -14,12 +14,14 @@ export async function GET(req: Request) {
   const todayKey = dayKey(now);
   const mskStart = new Date(`${todayKey}T00:00:00+03:00`);
   const mskEnd = addDays(mskStart, 1);
+  const calFrom = addDays(mskStart, -30);
+  const calTo = addDays(mskStart, 90);
   const monday = addDays(
     mskStart,
     -((new Date(mskStart.getTime() + 3 * 3_600_000).getUTCDay() + 6) % 7),
   );
 
-  const [subjects, tasks, rawEvents, dueReviewCount] = await Promise.all([
+  const [subjects, tasks, rawEvents, calRawEvents, questions, dueReviewCount] = await Promise.all([
     prisma.subject.findMany({
       where: { userId: user.id, archived: false, selfStudy: false },
       select: {
@@ -68,12 +70,37 @@ export async function GET(req: Request) {
       orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
     }),
     getScheduleEvents(user.id, mskStart, mskEnd),
+    getScheduleEvents(user.id, calFrom, calTo),
+    prisma.question.findMany({
+      where: { userId: user.id, subject: { archived: false } },
+      select: {
+        id: true,
+        subjectId: true,
+        text: true,
+        answer: true,
+        explanation: true,
+        status: true,
+        difficulty: true,
+        kind: true,
+        ticketNo: true,
+        srsDue: true,
+        srsInterval: true,
+        srsEase: true,
+        srsReps: true,
+        srsLapses: true,
+        sortOrder: true,
+        ticket: { select: { title: true } },
+        lecture: { select: { title: true, number: true } },
+      },
+      orderBy: [{ srsDue: { sort: "asc", nulls: "last" } }, { sortOrder: "asc" }],
+      take: 1500,
+    }),
     prisma.question.count({
       where: { userId: user.id, srsReps: { gt: 0 }, srsDue: { lte: now } },
     }),
   ]);
 
-  const todayEvents = expandEvents(rawEvents, mskStart, mskEnd).map((e) => ({
+  const serializeEvent = (e: ReturnType<typeof expandEvents<(typeof rawEvents)[number]>>[number]) => ({
     key: e.key,
     title: e.title,
     kind: e.kind,
@@ -85,7 +112,10 @@ export async function GET(req: Request) {
     color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
     subjectId: e.subjectId ?? null,
     subjectName: e.subject?.name ?? null,
-  }));
+  });
+
+  const todayEvents = expandEvents(rawEvents, mskStart, mskEnd).map(serializeEvent);
+  const calendarEvents = expandEvents(calRawEvents, calFrom, calTo).map(serializeEvent);
 
   const doneThisWeek = tasks.filter((t) => t.status === "DONE" && t.updatedAt >= monday).length;
   const openTasks = tasks.filter((t) => t.status !== "DONE");
@@ -135,6 +165,30 @@ export async function GET(req: Request) {
       })),
     })),
     todayEvents,
+    calendarEvents,
+    questions: questions.map((q) => ({
+      id: q.id,
+      subjectId: q.subjectId,
+      text: q.text,
+      answer: q.answer,
+      explanation: q.explanation,
+      status: q.status,
+      difficulty: q.difficulty,
+      kind: q.kind,
+      ticketNo: q.ticketNo,
+      ticketTitle: q.ticket?.title ?? null,
+      lectureTitle: q.lecture
+        ? q.lecture.number != null
+          ? `Лекция ${q.lecture.number}: ${q.lecture.title}`
+          : q.lecture.title
+        : null,
+      srsDue: q.srsDue ? q.srsDue.toISOString() : null,
+      srsInterval: q.srsInterval,
+      srsEase: q.srsEase,
+      srsReps: q.srsReps,
+      srsLapses: q.srsLapses,
+      sortOrder: q.sortOrder,
+    })),
     stats: {
       doneThisWeek,
       openCount: openTasks.length,

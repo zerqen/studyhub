@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.studyhub.app.data.AuthSession
 import ru.studyhub.app.data.DateHelpers
+import ru.studyhub.app.data.SrsEngine
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.SubjectDto
 import ru.studyhub.app.data.TaskDto
@@ -58,6 +59,7 @@ fun HomeScreen(
   onOpenTask: (TaskDto) -> Unit,
   onOpenCreateTask: () -> Unit,
   onOpenAllTasks: () -> Unit,
+  onOpenReview: () -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
   val subjectsById = remember(snapshot.subjects) { snapshot.subjects.associateBy { it.id } }
@@ -226,8 +228,46 @@ fun HomeScreen(
         }
       }
 
-      // Today's lessons (if any cached)
-      if (snapshot.todayEvents.isNotEmpty()) {
+      // Compact Review SRS Card
+      if (snapshot.questions.isNotEmpty()) {
+        item {
+          val dueCount = remember(snapshot.questions) {
+            snapshot.questions.count { it.srsReps > 0 && SrsEngine.isDue(it.srsDue) }
+          }
+          val newCount = remember(snapshot.questions) {
+            snapshot.questions.count { it.srsReps == 0 }
+          }
+          StudyCard {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Повторение карточек", style = MaterialTheme.typography.titleLarge, color = colors.fg)
+                Text(
+                  text = if (dueCount > 0) "$dueCount к повтору · $newCount новых (оффлайн)" else "$newCount новых вопросов (оффлайн)",
+                  style = MaterialTheme.typography.labelMedium,
+                  color = if (dueCount > 0) colors.urgent else colors.muted,
+                )
+              }
+              Spacer(modifier = Modifier.width(8.dp))
+              FilledTonalButton(
+                onClick = onOpenReview,
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+              ) {
+                Text("Учить →", style = MaterialTheme.typography.labelLarge)
+              }
+            }
+          }
+        }
+      }
+
+      // Today's lessons (only when user explicitly enables showLessons)
+      if (session.showLessons && snapshot.todayEvents.isNotEmpty()) {
         item {
           TodayLessonsCard(events = snapshot.todayEvents)
         }

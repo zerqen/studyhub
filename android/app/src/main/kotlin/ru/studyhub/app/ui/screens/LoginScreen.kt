@@ -49,7 +49,7 @@ fun LoginScreen(
   onLogin: (serverUrl: String, email: String, password: String) -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
-  var serverUrl by rememberSaveable { mutableStateOf(initialServerUrl.ifBlank { "https://" }) }
+  var serverUrl by rememberSaveable { mutableStateOf(initialServerUrl.ifBlank { "https://studyhub-lime.vercel.app" }) }
   var email by rememberSaveable { mutableStateOf("") }
   var password by rememberSaveable { mutableStateOf("") }
   var showPassword by rememberSaveable { mutableStateOf(false) }

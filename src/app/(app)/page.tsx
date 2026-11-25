@@ -150,24 +150,19 @@ export default async function DashboardPage() {
             </section>
 
             {data.todayEvents.length ? (
-              <section aria-labelledby="today-title" className="card rounded-[14px] p-1.5">
-                <h2 id="today-title" className="heading px-3 pb-1 pt-2.5 text-base">
-                  Сегодня по расписанию
-                </h2>
-                <TodayLessons
-                  lessons={data.todayEvents.map((e) => ({
-                    key: e.key,
-                    title: e.title,
-                    kind: e.kind,
-                    start: e.start.toISOString(),
-                    allDay: e.allDay,
-                    location: e.location,
-                    color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
-                    subjectId: e.subjectId,
-                  }))}
-                  homework={data.homework}
-                />
-              </section>
+              <TodayLessons
+                lessons={data.todayEvents.map((e) => ({
+                  key: e.key,
+                  title: e.title,
+                  kind: e.kind,
+                  start: e.start.toISOString(),
+                  allDay: e.allDay,
+                  location: e.location,
+                  color: e.color ?? e.subject?.color ?? kindMeta(e.kind).color,
+                  subjectId: e.subjectId,
+                }))}
+                homework={data.homework}
+              />
             ) : null}
           </div>
         </div>

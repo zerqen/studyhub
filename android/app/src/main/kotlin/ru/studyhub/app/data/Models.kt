@@ -143,12 +143,47 @@ data class SyncStatsDto(
 )
 
 @Serializable
+data class QuestionDto(
+  val id: String,
+  val subjectId: String,
+  val text: String,
+  val answer: String? = null,
+  val explanation: String? = null,
+  val status: String = "UNLEARNED",
+  val difficulty: String = "MEDIUM",
+  val kind: String = "THEORY",
+  val ticketNo: Int? = null,
+  val ticketTitle: String? = null,
+  val lectureTitle: String? = null,
+  val srsDue: String? = null,
+  val srsInterval: Int = 0,
+  val srsEase: Double = 2.5,
+  val srsReps: Int = 0,
+  val srsLapses: Int = 0,
+  val sortOrder: Int = 0,
+)
+
+@Serializable
+data class ReviewRequest(
+  val questionId: String,
+  val grade: Int,
+)
+
+@Serializable
+data class ReviewResponse(
+  val status: String,
+  val due: String,
+)
+
+@Serializable
 data class SyncResponse(
   val serverTime: String,
   val user: MobileUserDto,
   val subjects: List<SubjectDto> = emptyList(),
   val tasks: List<TaskDto> = emptyList(),
   val todayEvents: List<TodayEventDto> = emptyList(),
+  val calendarEvents: List<TodayEventDto> = emptyList(),
+  val questions: List<QuestionDto> = emptyList(),
   val stats: SyncStatsDto = SyncStatsDto(),
 )
 
@@ -216,6 +251,7 @@ data class AuthSession(
   val doneThisWeek: Int = 0,
   val dueReviewCount: Int = 0,
   val themeMode: String = "system",
+  val showLessons: Boolean = false,
 ) {
   val isLoggedIn: Boolean get() = token.isNotBlank() && serverUrl.isNotBlank()
 }
@@ -224,6 +260,8 @@ data class StudyHubSnapshot(
   val subjects: List<SubjectDto> = emptyList(),
   val tasks: List<TaskDto> = emptyList(),
   val todayEvents: List<TodayEventDto> = emptyList(),
+  val calendarEvents: List<TodayEventDto> = emptyList(),
+  val questions: List<QuestionDto> = emptyList(),
   val pendingOpsCount: Int = 0,
   val isSyncing: Boolean = false,
   val lastError: String? = null,

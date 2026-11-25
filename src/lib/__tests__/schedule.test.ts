@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandEvents, weekParity } from "../schedule";
+import { expandEvents, isLessonKind, weekParity } from "../schedule";
 
 const base = {
   id: "e1",
@@ -35,5 +35,19 @@ describe("weekParity", () => {
   it("неделя с 1 сентября — первая и нечётная", () => {
     expect(weekParity(new Date(2026, 8, 1))).toEqual({ week: 1, odd: true });
     expect(weekParity(new Date(2026, 8, 8)).odd).toBe(false);
+  });
+});
+
+
+describe("isLessonKind", () => {
+  it("отличает пары от экзаменов, контрольных и прочих событий", () => {
+    expect(isLessonKind("LECTURE")).toBe(true);
+    expect(isLessonKind("SEMINAR")).toBe(true);
+    expect(isLessonKind("LAB")).toBe(true);
+    expect(isLessonKind("CONSULT")).toBe(true);
+    expect(isLessonKind("EXAM")).toBe(false);
+    expect(isLessonKind("TEST")).toBe(false);
+    expect(isLessonKind("OTHER")).toBe(false);
+    expect(isLessonKind(null)).toBe(false);
   });
 });
