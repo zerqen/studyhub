@@ -3,6 +3,8 @@ package ru.studyhub.app.ui.components
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -570,4 +572,46 @@ fun openFileWithSystemViewer(context: Context, file: File, mimeType: String) {
   } catch (_: ActivityNotFoundException) {
     Toast.makeText(context, "На телефоне нет приложения для открытия этого файла", Toast.LENGTH_LONG).show()
   }
+}
+
+fun readPickedUriBytes(context: Context, uri: Uri): Triple<String, String, ByteArray>? {
+  val resolver = context.contentResolver
+  var displayName = "file"
+  var reportedSize = -1L
+  resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+    if (cursor.moveToFirst()) {
+      val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+      if (nameIdx >= 0) {
+        cursor.getString(nameIdx)?.takeIf { it.isNotBlank() }?.let { displayName = it }
+      }
+      val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+      if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
+        reportedSize = cursor.getLong(sizeIdx)
+      }
+    }
+  }
+  val maxBytes = 300L * 1024L * 1024L
+  if (reportedSize > maxBytes) {
+    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
+    return null
+  }
+  val mimeType = resolver.getType(uri) ?: "application/octet-stream"
+  val bytes = try {
+    resolver.openInputStream(uri)?.use { it.readBytes() }
+  } catch (_: OutOfMemoryError) {
+    Toast.makeText(context, "Файл слишком большой для чтения в память", Toast.LENGTH_LONG).show()
+    return null
+  } catch (e: Exception) {
+    Toast.makeText(context, e.message ?: "Не удалось прочитать файл", Toast.LENGTH_LONG).show()
+    return null
+  }
+  if (bytes == null || bytes.isEmpty()) {
+    Toast.makeText(context, "Выбран пустой файл", Toast.LENGTH_SHORT).show()
+    return null
+  }
+  if (bytes.size.toLong() > maxBytes) {
+    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
+    return null
+  }
+  return Triple(displayName, mimeType, bytes)
 }

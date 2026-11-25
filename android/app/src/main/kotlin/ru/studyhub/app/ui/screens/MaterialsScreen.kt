@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Functions
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
@@ -80,6 +81,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.studyhub.app.data.AttachmentDto
 import ru.studyhub.app.data.DateHelpers
+import ru.studyhub.app.data.FileKind
+import ru.studyhub.app.data.FileSort
+import ru.studyhub.app.data.FilesViewHelper
 import ru.studyhub.app.data.LectureDto
 import ru.studyhub.app.data.MathFormatter
 import ru.studyhub.app.data.NoteDto
@@ -94,17 +98,20 @@ import ru.studyhub.app.ui.components.StudyCard
 import ru.studyhub.app.ui.components.SyncStatusPill
 import ru.studyhub.app.ui.components.TaskRowItem
 import ru.studyhub.app.ui.components.parseHexColor
+import ru.studyhub.app.ui.components.readPickedUriBytes
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
 private enum class MaterialsSection(val label: String) {
   SUBJECTS("Предметы"),
   NOTES("Заметки"),
   LECTURES("Лекции"),
+  FILES("Файлы"),
 }
 
 private enum class SubjectTab(val label: String) {
   LECTURES("Лекции"),
   NOTES("Заметки"),
+  FILES("Файлы"),
   TASKS("Задачи"),
   QUESTIONS("Вопросы"),
 }
@@ -126,6 +133,12 @@ fun MaterialsScreen(
   onCreateLecture: (subjectId: String?) -> Unit,
   onToggleTask: (String) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
+  busyAttachmentId: String? = null,
+  uploadingKey: String? = null,
+  isAttachmentCached: (AttachmentDto) -> Boolean = { false },
+  onOpenAttachment: (AttachmentDto) -> Unit = {},
+  onUploadFile: (parentType: String?, parentId: String?, fileName: String, mimeType: String, bytes: ByteArray, uploadKey: String) -> Unit = { _, _, _, _, _, _ -> },
+  onDeleteAttachment: (String) -> Unit = {},
 ) {
   val selectedSubject = selectedSubjectId?.let { id ->
     snapshot.subjects.firstOrNull { it.id == id }
@@ -143,14 +156,53 @@ fun MaterialsScreen(
       onCreateLecture = { onCreateLecture(selectedSubject.id) },
       onToggleTask = onToggleTask,
       onOpenTask = onOpenTask,
+      busyAttachmentId = busyAttachmentId,
+      isUploadingSubjectFile = uploadingKey == "subject:${selectedSubject.id}",
+      isAttachmentCached = isAttachmentCached,
+      onOpenAttachment = onOpenAttachment,
+      onUploadSubjectFile = { name, mime, bytes ->
+        onUploadFile("subject", selectedSubject.id, name, mime, bytes, "subject:${selectedSubject.id}")
+      },
+      onDeleteAttachment = onDeleteAttachment,
     )
     return
   }
 
   val colors = StudyHubThemeColors.current
+  val context = LocalContext.current
   var section by rememberSaveable { mutableStateOf(MaterialsSection.SUBJECTS) }
   var lectureSubjectFilter by rememberSaveable { mutableStateOf<String?>(null) }
+
+  var fileFolder by rememberSaveable {
+    mutableStateOf(
+      if (snapshot.attachments.any { FilesViewHelper.isRecent(it.createdAt) }) "recent" else "all",
+    )
+  }
+  var fileKind by rememberSaveable { mutableStateOf(FileKind.ALL) }
+  var fileSort by rememberSaveable { mutableStateOf(FileSort.NEW) }
+  var fileQuery by rememberSaveable { mutableStateOf("") }
+  var pendingDeleteAttachment by remember { mutableStateOf<AttachmentDto?>(null) }
+
   val subjectsById = remember(snapshot.subjects) { snapshot.subjects.associateBy { it.id } }
+  val lecturesById = remember(snapshot.lectures) { snapshot.lectures.associateBy { it.id } }
+  val tasksById = remember(snapshot.tasks) { snapshot.tasks.associateBy { it.id } }
+  val notesById = remember(snapshot.notes) { snapshot.notes.associateBy { it.id } }
+
+  val allFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) {
+      readPickedUriBytes(context, uri)?.let { (name, mime, bytes) ->
+        val subjectFolder = fileFolder.takeIf { it != "recent" && it != "all" && it != "loose" && fileQuery.isBlank() }
+        onUploadFile(
+          if (subjectFolder != null) "subject" else null,
+          subjectFolder,
+          name,
+          mime,
+          bytes,
+          "files:all",
+        )
+      }
+    }
+  }
 
   PullToRefreshBox(
     isRefreshing = snapshot.isSyncing,
@@ -190,16 +242,20 @@ fun MaterialsScreen(
       }
 
       item {
-        Row(
+        LazyRow(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically,
         ) {
-          MaterialsSection.entries.forEach { s ->
+          items(MaterialsSection.entries) { s ->
+            val label = if (s == MaterialsSection.FILES && snapshot.attachments.isNotEmpty()) {
+              "${s.label} (${snapshot.attachments.size})"
+            } else {
+              s.label
+            }
             FilterChip(
               selected = section == s,
               onClick = { section = s },
-              label = { Text(s.label) },
+              label = { Text(label) },
             )
           }
         }
@@ -331,10 +387,110 @@ fun MaterialsScreen(
             }
           }
         }
+
+        MaterialsSection.FILES -> {
+          val folders = FilesViewHelper.buildFolders(snapshot.attachments, snapshot.subjects)
+          val recentCount = snapshot.attachments.count { FilesViewHelper.isRecent(it.createdAt) }
+          val looseCount = snapshot.attachments.count { it.folder == "loose" }
+          val filteredFiles = FilesViewHelper.filterAndSort(
+            attachments = snapshot.attachments,
+            folderId = fileFolder,
+            kind = fileKind,
+            sort = fileSort,
+            query = fileQuery,
+          )
+          val activeFolderLabel = when (fileFolder) {
+            "recent", "all", "loose" -> "Загрузить"
+            else -> "В папку"
+          }
+
+          item {
+            FilesBrowserControls(
+              query = fileQuery,
+              onQueryChange = { fileQuery = it },
+              selectedFolder = fileFolder,
+              onSelectFolder = {
+                fileFolder = it
+                fileQuery = ""
+              },
+              recentCount = recentCount,
+              totalCount = snapshot.attachments.size,
+              looseCount = looseCount,
+              folders = folders,
+              selectedKind = fileKind,
+              onSelectKind = { fileKind = it },
+              selectedSort = fileSort,
+              onSelectSort = { fileSort = it },
+              uploadLabel = activeFolderLabel,
+              isUploading = uploadingKey == "files:all",
+              onPickUpload = { allFilePicker.launch(arrayOf("*/*")) },
+            )
+          }
+
+          if (filteredFiles.isEmpty()) {
+            item {
+              EmptyMaterialsCard(
+                title = if (fileQuery.isNotBlank()) "Ничего не нашлось" else "Файлов нет",
+                hint = if (snapshot.attachments.isEmpty()) {
+                  "Загружай файлы прямо сюда или прикрепляй к предметам, задачам, лекциям и заметкам."
+                } else {
+                  "В этой папке или с таким фильтром файлов нет."
+                },
+              )
+            }
+          } else {
+            items(filteredFiles, key = { it.id }) { att ->
+              val jumpAction: (() -> Unit)? = when {
+                att.lectureId != null && lecturesById[att.lectureId] != null -> {
+                  { onOpenLecture(lecturesById.getValue(att.lectureId)) }
+                }
+                att.taskId != null && tasksById[att.taskId] != null -> {
+                  { onOpenTask(tasksById.getValue(att.taskId)) }
+                }
+                att.noteId != null && notesById[att.noteId] != null -> {
+                  { onOpenNote(notesById.getValue(att.noteId)) }
+                }
+                att.subjectId != null && subjectsById[att.subjectId] != null -> {
+                  { onSelectSubject(att.subjectId) }
+                }
+                else -> null
+              }
+              FileBrowserRow(
+                attachment = att,
+                isCached = isAttachmentCached(att),
+                isBusy = busyAttachmentId == att.id,
+                onOpen = { onOpenAttachment(att) },
+                onJumpToSource = jumpAction,
+                onDelete = { pendingDeleteAttachment = att },
+              )
+            }
+          }
+        }
       }
 
       item { Spacer(modifier = Modifier.height(84.dp)) }
     }
+  }
+
+  pendingDeleteAttachment?.let { target ->
+    AlertDialog(
+      onDismissRequest = { pendingDeleteAttachment = null },
+      title = { Text("Удалить файл?") },
+      text = { Text("Файл «${target.originalName}» будет удалён с сервера и из кэша.") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onDeleteAttachment(target.id)
+            pendingDeleteAttachment = null
+          },
+        ) {
+          Text("Удалить", color = colors.danger)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { pendingDeleteAttachment = null }) { Text("Отмена") }
+      },
+    )
   }
 }
 
@@ -351,10 +507,19 @@ private fun SubjectDetailView(
   onCreateLecture: () -> Unit,
   onToggleTask: (String) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
+  busyAttachmentId: String? = null,
+  isUploadingSubjectFile: Boolean = false,
+  isAttachmentCached: (AttachmentDto) -> Boolean = { false },
+  onOpenAttachment: (AttachmentDto) -> Unit = {},
+  onUploadSubjectFile: (fileName: String, mimeType: String, bytes: ByteArray) -> Unit = { _, _, _ -> },
+  onDeleteAttachment: (String) -> Unit = {},
 ) {
   val colors = StudyHubThemeColors.current
+  val context = LocalContext.current
   val subColor = parseHexColor(subject.color, colors.accent)
   var tab by rememberSaveable(subject.id) { mutableStateOf(SubjectTab.LECTURES) }
+  var showFormulaSheet by rememberSaveable(subject.id) { mutableStateOf(false) }
+  var pendingDeleteAttachment by remember { mutableStateOf<AttachmentDto?>(null) }
 
   val subjectLectures = remember(snapshot.lectures, subject.id) {
     snapshot.lectures.filter { it.subjectId == subject.id }
@@ -362,11 +527,22 @@ private fun SubjectDetailView(
   val subjectNotes = remember(snapshot.notes, subject.id) {
     snapshot.notes.filter { it.subjectId == subject.id }
   }
+  val subjectFiles = remember(snapshot.attachments, subject.id) {
+    snapshot.attachments.filter { it.folder == subject.id || it.subjectId == subject.id }
+  }
   val subjectTasks = remember(snapshot.tasks, subject.id) {
     snapshot.tasks.filter { it.subjectId == subject.id && it.status != "CANCELLED" }
   }
   val subjectQuestions = remember(snapshot.questions, subject.id) {
     snapshot.questions.filter { it.subjectId == subject.id }
+  }
+
+  val subjectFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) {
+      readPickedUriBytes(context, uri)?.let { (name, mime, bytes) ->
+        onUploadSubjectFile(name, mime, bytes)
+      }
+    }
   }
 
   PullToRefreshBox(
@@ -419,6 +595,15 @@ private fun SubjectDetailView(
               )
             }
           }
+          FilledTonalButton(
+            onClick = { showFormulaSheet = true },
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+          ) {
+            Icon(Icons.Rounded.Functions, contentDescription = "Формулы", modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Формулы")
+          }
         }
       }
 
@@ -428,6 +613,7 @@ private fun SubjectDetailView(
             val count = when (t) {
               SubjectTab.LECTURES -> subjectLectures.size
               SubjectTab.NOTES -> subjectNotes.size
+              SubjectTab.FILES -> subjectFiles.size
               SubjectTab.TASKS -> subjectTasks.size
               SubjectTab.QUESTIONS -> subjectQuestions.size
             }
@@ -456,6 +642,45 @@ private fun SubjectDetailView(
           } else {
             items(subjectLectures, key = { it.id }) { lecture ->
               LectureListCard(lecture = lecture, subject = null, onClick = { onOpenLecture(lecture) })
+            }
+          }
+        }
+        SubjectTab.FILES -> {
+          item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                FilledTonalButton(
+                  onClick = { subjectFilePicker.launch(arrayOf("*/*")) },
+                  enabled = !isUploadingSubjectFile,
+                  shape = RoundedCornerShape(10.dp),
+                ) {
+                  Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Text("Загрузить файл")
+                }
+              }
+              if (isUploadingSubjectFile) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = colors.accent)
+              }
+            }
+          }
+          if (subjectFiles.isEmpty()) {
+            item {
+              EmptyMaterialsCard(
+                title = "Файлов по предмету нет",
+                hint = "Нажми «Загрузить файл», чтобы добавить PDF, методичку или фото к предмету.",
+              )
+            }
+          } else {
+            items(subjectFiles, key = { it.id }) { att ->
+              FileBrowserRow(
+                attachment = att,
+                isCached = isAttachmentCached(att),
+                isBusy = busyAttachmentId == att.id,
+                showFolderBadge = false,
+                onOpen = { onOpenAttachment(att) },
+                onDelete = { pendingDeleteAttachment = att },
+              )
             }
           }
         }
@@ -512,6 +737,36 @@ private fun SubjectDetailView(
 
       item { Spacer(modifier = Modifier.height(84.dp)) }
     }
+  }
+
+  if (showFormulaSheet) {
+    FormulaSheetModal(
+      subject = subject,
+      lectures = subjectLectures,
+      questions = subjectQuestions,
+      onDismiss = { showFormulaSheet = false },
+    )
+  }
+
+  pendingDeleteAttachment?.let { target ->
+    AlertDialog(
+      onDismissRequest = { pendingDeleteAttachment = null },
+      title = { Text("Удалить файл?") },
+      text = { Text("Файл «${target.originalName}» будет удалён с сервера и из кэша.") },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onDeleteAttachment(target.id)
+            pendingDeleteAttachment = null
+          },
+        ) {
+          Text("Удалить", color = colors.danger)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { pendingDeleteAttachment = null }) { Text("Отмена") }
+      },
+    )
   }
 }
 
@@ -795,48 +1050,6 @@ private enum class LectureSheetTab(val label: String) {
 }
 
 private val TRANSCRIPT_HEADER_RE = Regex("^<!--file:[^|]*\\|(.*)-->\\s*$")
-
-private fun readPickedUriBytes(context: android.content.Context, uri: Uri): Triple<String, String, ByteArray>? {
-  val resolver = context.contentResolver
-  var displayName = "file"
-  var reportedSize = -1L
-  resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-    if (cursor.moveToFirst()) {
-      val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-      if (nameIdx >= 0) {
-        cursor.getString(nameIdx)?.takeIf { it.isNotBlank() }?.let { displayName = it }
-      }
-      val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
-      if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
-        reportedSize = cursor.getLong(sizeIdx)
-      }
-    }
-  }
-  val maxBytes = 300L * 1024L * 1024L
-  if (reportedSize > maxBytes) {
-    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
-    return null
-  }
-  val mimeType = resolver.getType(uri) ?: "application/octet-stream"
-  val bytes = try {
-    resolver.openInputStream(uri)?.use { it.readBytes() }
-  } catch (_: OutOfMemoryError) {
-    Toast.makeText(context, "Файл слишком большой для чтения в память", Toast.LENGTH_LONG).show()
-    return null
-  } catch (e: Exception) {
-    Toast.makeText(context, e.message ?: "Не удалось прочитать файл", Toast.LENGTH_LONG).show()
-    return null
-  }
-  if (bytes == null || bytes.isEmpty()) {
-    Toast.makeText(context, "Выбран пустой файл", Toast.LENGTH_SHORT).show()
-    return null
-  }
-  if (bytes.size.toLong() > maxBytes) {
-    Toast.makeText(context, "Файл больше 300 МБ не поддерживается", Toast.LENGTH_LONG).show()
-    return null
-  }
-  return Triple(displayName, mimeType, bytes)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1279,8 +1492,11 @@ fun NoteEditorSheet(
   initialSubjectId: String? = null,
   attachments: List<AttachmentDto> = emptyList(),
   busyAttachmentId: String? = null,
+  isUploading: Boolean = false,
   isAttachmentCached: (AttachmentDto) -> Boolean = { false },
   onOpenAttachment: (AttachmentDto) -> Unit = {},
+  onUploadFile: ((fileName: String, mimeType: String, bytes: ByteArray) -> Unit)? = null,
+  onDeleteAttachment: ((String) -> Unit)? = null,
   onDismiss: () -> Unit,
   onSave: (title: String, content: String, subjectId: String?, color: String, pinned: Boolean) -> Unit,
   onDelete: (() -> Unit)? = null,
@@ -1434,15 +1650,44 @@ fun NoteEditorSheet(
         }
       }
 
-      if (attachments.isNotEmpty()) {
+      if (attachments.isNotEmpty() || (existingNote != null && onUploadFile != null)) {
+        val noteContext = LocalContext.current
+        val noteFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+          if (uri != null && onUploadFile != null) {
+            readPickedUriBytes(noteContext, uri)?.let { (name, mime, bytes) ->
+              onUploadFile(name, mime, bytes)
+            }
+          }
+        }
         HorizontalDivider(color = colors.line)
-        Text("Вложения (${attachments.size})", style = MaterialTheme.typography.titleMedium, color = colors.fg)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text("Вложения (${attachments.size})", style = MaterialTheme.typography.titleMedium, color = colors.fg)
+          if (existingNote != null && onUploadFile != null) {
+            FilledTonalButton(
+              onClick = { noteFilePicker.launch(arrayOf("*/*")) },
+              enabled = !isUploading,
+              shape = RoundedCornerShape(10.dp),
+            ) {
+              Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Файл")
+            }
+          }
+        }
+        if (isUploading) {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = colors.accent)
+        }
         attachments.forEach { att ->
           AttachmentRowItem(
             attachment = att,
             isCached = isAttachmentCached(att),
             isBusy = busyAttachmentId == att.id,
             onOpen = { onOpenAttachment(att) },
+            onDelete = if (onDeleteAttachment != null) ({ onDeleteAttachment(att.id) }) else null,
           )
         }
       }

@@ -155,19 +155,21 @@ class StudyHubApi {
 
   suspend fun uploadAttachment(
     token: String,
-    parentType: String,
-    parentId: String,
+    parentType: String? = null,
+    parentId: String? = null,
     fileName: String,
     mimeType: String,
     bytes: ByteArray,
   ): AttachmentDto = withContext(Dispatchers.IO) {
     if (bytes.size <= 4_000_000) {
       val mediaType = runCatching { mimeType.toMediaType() }.getOrDefault("application/octet-stream".toMediaType())
-      val formBody = MultipartBody.Builder()
+      val formBuilder = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
-        .addFormDataPart("${parentType}Id", parentId)
         .addFormDataPart("file", fileName, bytes.toRequestBody(mediaType))
-        .build()
+      if (!parentType.isNullOrBlank() && !parentId.isNullOrBlank()) {
+        formBuilder.addFormDataPart("${parentType}Id", parentId)
+      }
+      val formBody = formBuilder.build()
       val req = authBuilder(token, "/api/mobile/files/upload").post(formBody).build()
       return@withContext executeJson<AttachmentEnvelope>(req).attachment
     }
@@ -175,8 +177,8 @@ class StudyHubApi {
     // Large file (> 4 MB): direct Vercel Blob upload
     val prepBody = json.encodeToString(
       BlobPrepareRequest(
-        parentType = parentType,
-        parentId = parentId,
+        parentType = parentType?.takeIf { it.isNotBlank() && !parentId.isNullOrBlank() },
+        parentId = parentId?.takeIf { it.isNotBlank() && !parentType.isNullOrBlank() },
         name = fileName,
         size = bytes.size.toLong(),
       ),

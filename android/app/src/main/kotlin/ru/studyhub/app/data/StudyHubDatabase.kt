@@ -13,7 +13,7 @@ import androidx.core.database.sqlite.transaction
 class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
   companion object {
     private const val DB_NAME = "studyhub_offline.db"
-    private const val DB_VERSION = 4
+    private const val DB_VERSION = 5
   }
 
   override fun onCreate(db: SQLiteDatabase) {
@@ -109,6 +109,19 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       }
       createV4Tables(db)
     }
+    if (oldVersion < 5) {
+      val alterCols = listOf(
+        "ALTER TABLE attachments ADD COLUMN folder TEXT NOT NULL DEFAULT 'loose'",
+        "ALTER TABLE attachments ADD COLUMN folder_name TEXT NOT NULL DEFAULT 'Не прикреплено'",
+        "ALTER TABLE attachments ADD COLUMN folder_color TEXT",
+        "ALTER TABLE attachments ADD COLUMN folder_self_study INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE attachments ADD COLUMN where_label TEXT NOT NULL DEFAULT 'Не прикреплено'",
+      )
+      for (sql in alterCols) {
+        runCatching { db.execSQL(sql) }
+      }
+      db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_subject ON attachments(subject_id)")
+    }
   }
 
   private fun createV2Tables(db: SQLiteDatabase) {
@@ -202,13 +215,19 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         note_id TEXT,
         lecture_id TEXT,
         question_id TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        folder TEXT NOT NULL DEFAULT 'loose',
+        folder_name TEXT NOT NULL DEFAULT 'Не прикреплено',
+        folder_color TEXT,
+        folder_self_study INTEGER NOT NULL DEFAULT 0,
+        where_label TEXT NOT NULL DEFAULT 'Не прикреплено'
       )
       """.trimIndent(),
     )
     db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_lecture ON attachments(lecture_id)")
     db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id)")
     db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id)")
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_attachments_subject ON attachments(subject_id)")
   }
 
   @Synchronized
@@ -359,7 +378,7 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
 
     val attachments = mutableListOf<AttachmentDto>()
     db.rawQuery(
-      "SELECT id, original_name, mime_type, size, subject_id, task_id, note_id, lecture_id, question_id, created_at FROM attachments ORDER BY created_at DESC",
+      "SELECT id, original_name, mime_type, size, subject_id, task_id, note_id, lecture_id, question_id, created_at, folder, folder_name, folder_color, folder_self_study, where_label FROM attachments ORDER BY created_at DESC",
       null,
     ).use { c ->
       while (c.moveToNext()) {
@@ -374,6 +393,11 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
           lectureId = c.getString(7),
           questionId = c.getString(8),
           createdAt = c.getString(9),
+          folder = c.getString(10),
+          folderName = c.getString(11),
+          folderColor = c.getString(12),
+          folderSelfStudy = c.getInt(13) == 1,
+          whereLabel = c.getString(14),
         )
       }
     }
@@ -780,6 +804,11 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         put("lecture_id", a.lectureId)
         put("question_id", a.questionId)
         put("created_at", a.createdAt)
+        put("folder", a.folder)
+        put("folder_name", a.folderName)
+        put("folder_color", a.folderColor)
+        put("folder_self_study", if (a.folderSelfStudy) 1 else 0)
+        put("where_label", a.whereLabel)
       },
       SQLiteDatabase.CONFLICT_REPLACE,
     )

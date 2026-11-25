@@ -1,6 +1,7 @@
 import { saveAttachment } from "@/lib/attachments";
 import { DIRECT_UPLOAD_THRESHOLD } from "@/lib/constants";
 import { assertParentOwned, parentFrom, UploadParentNotFound } from "@/lib/upload-parent";
+import { loadSerializedMobileAttachment } from "@/lib/mobile-attachment";
 import { mobileError, mobileJson, requireMobileUser } from "@/lib/mobile-auth";
 
 export async function POST(req: Request) {
@@ -21,23 +22,24 @@ export async function POST(req: Request) {
     }
 
     const row = await saveAttachment(user.id, parent, file);
-    return mobileJson(
-      {
-        attachment: {
-          id: row.id,
-          originalName: row.originalName,
-          mimeType: row.mimeType,
-          size: row.size,
-          subjectId: row.subjectId,
-          taskId: row.taskId,
-          noteId: row.noteId,
-          lectureId: row.lectureId,
-          questionId: row.questionId,
-          createdAt: row.createdAt.toISOString(),
-        },
-      },
-      201,
-    );
+    const attachment = (await loadSerializedMobileAttachment(row.id)) ?? {
+      id: row.id,
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      size: row.size,
+      subjectId: row.subjectId,
+      taskId: row.taskId,
+      noteId: row.noteId,
+      lectureId: row.lectureId,
+      questionId: row.questionId,
+      createdAt: row.createdAt.toISOString(),
+      folder: "loose",
+      folderName: "Не прикреплено",
+      folderColor: null,
+      folderSelfStudy: false,
+      whereLabel: "Не прикреплено",
+    };
+    return mobileJson({ attachment }, 201);
   } catch (e) {
     if (e instanceof UploadParentNotFound) {
       return mobileError("Родительский объект не найден", 404);

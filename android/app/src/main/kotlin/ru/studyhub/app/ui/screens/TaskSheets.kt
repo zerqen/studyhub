@@ -1,5 +1,7 @@
 package ru.studyhub.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,10 +34,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -67,6 +71,7 @@ import ru.studyhub.app.data.TaskDto
 import ru.studyhub.app.data.TaskKind
 import ru.studyhub.app.data.TaskPriority
 import ru.studyhub.app.ui.components.AttachmentRowItem
+import ru.studyhub.app.ui.components.readPickedUriBytes
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -330,8 +335,11 @@ fun TaskDetailSheet(
   subjects: List<SubjectDto>,
   attachments: List<AttachmentDto> = emptyList(),
   busyAttachmentId: String? = null,
+  isUploading: Boolean = false,
   isAttachmentCached: (AttachmentDto) -> Boolean = { false },
   onOpenAttachment: (AttachmentDto) -> Unit = {},
+  onUploadFile: ((fileName: String, mimeType: String, bytes: ByteArray) -> Unit)? = null,
+  onDeleteAttachment: ((String) -> Unit)? = null,
   onDismiss: () -> Unit,
   onToggleDone: () -> Unit,
   onSaveEdits: (
@@ -569,19 +577,48 @@ fun TaskDetailSheet(
         }
       }
 
-      if (attachments.isNotEmpty()) {
+      if (attachments.isNotEmpty() || onUploadFile != null) {
+        val taskContext = androidx.compose.ui.platform.LocalContext.current
+        val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+          if (uri != null && onUploadFile != null) {
+            readPickedUriBytes(taskContext, uri)?.let { (name, mime, bytes) ->
+              onUploadFile(name, mime, bytes)
+            }
+          }
+        }
         HorizontalDivider(color = colors.line)
-        Text(
-          text = "Файлы (${attachments.size})",
-          style = MaterialTheme.typography.titleMedium,
-          color = colors.fg,
-        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = "Файлы (${attachments.size})",
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.fg,
+          )
+          if (onUploadFile != null) {
+            FilledTonalButton(
+              onClick = { filePicker.launch(arrayOf("*/*")) },
+              enabled = !isUploading,
+              shape = RoundedCornerShape(10.dp),
+            ) {
+              Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Файл")
+            }
+          }
+        }
+        if (isUploading) {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = colors.accent)
+        }
         attachments.forEach { file ->
           AttachmentRowItem(
             attachment = file,
             isCached = isAttachmentCached(file),
             isBusy = busyAttachmentId == file.id,
             onOpen = { onOpenAttachment(file) },
+            onDelete = if (onDeleteAttachment != null) ({ onDeleteAttachment(file.id) }) else null,
           )
         }
       }

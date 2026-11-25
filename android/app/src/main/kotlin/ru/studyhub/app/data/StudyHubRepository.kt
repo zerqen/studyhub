@@ -49,6 +49,7 @@ class StudyHubRepository(
   }
 
   private val syncMutex = Mutex()
+  private val remappedIds = mutableMapOf<String, String>()
   private val _snapshot = MutableStateFlow(db.readSnapshot())
   val snapshot: StateFlow<StudyHubSnapshot> = _snapshot.asStateFlow()
 
@@ -179,6 +180,7 @@ class StudyHubRepository(
       OP_CREATE_TASK -> {
         val req = api.json.decodeFromString<CreateTaskRequest>(op.payloadJson)
         val created = api.createTask(session.token, req)
+        remappedIds[op.entityId] = created.id
         withContext(Dispatchers.IO) { db.remapTaskId(op.entityId, created) }
       }
       OP_UPDATE_TASK -> {
@@ -218,6 +220,7 @@ class StudyHubRepository(
       OP_CREATE_NOTE -> {
         val req = api.json.decodeFromString<CreateNoteRequest>(op.payloadJson)
         val created = api.createNote(session.token, req)
+        remappedIds[op.entityId] = created.id
         withContext(Dispatchers.IO) { db.remapNoteId(op.entityId, created) }
       }
       OP_UPDATE_NOTE -> {
@@ -233,6 +236,7 @@ class StudyHubRepository(
       OP_CREATE_LECTURE -> {
         val req = api.json.decodeFromString<CreateLectureRequest>(op.payloadJson)
         val created = api.createLecture(session.token, req)
+        remappedIds[op.entityId] = created.id
         withContext(Dispatchers.IO) { db.remapLectureId(op.entityId, created) }
       }
       OP_UPDATE_LECTURE -> {
@@ -675,26 +679,26 @@ class StudyHubRepository(
     dest
   }
 
-  suspend fun uploadFileForLecture(
-    lectureId: String,
+  suspend fun uploadAttachment(
+    parentType: String?,
+    parentId: String?,
     fileName: String,
     mimeType: String,
     bytes: ByteArray,
   ): Result<AttachmentDto> = runCatching {
     val session = sessionStore.current()
     if (!session.isLoggedIn) throw IOException("Нужна авторизация")
-    var targetId = lectureId
-    if (targetId.startsWith("local_lec_")) {
+    var targetId = parentId
+    if (targetId != null && targetId.startsWith("local_")) {
       syncNow().getOrThrow()
-      val matched = _snapshot.value.lectures.firstOrNull { !it.id.startsWith("local_lec_") }
-      if (matched == null || _snapshot.value.lectures.any { it.id == lectureId }) {
-        throw IOException("Сначала синхронизируйте лекцию с сервером")
+      targetId = remappedIds[targetId] ?: targetId
+      if (targetId.startsWith("local_")) {
+        throw IOException("Сначала синхронизируйте запись с сервером")
       }
-      targetId = matched.id
     }
     val uploaded = api.uploadAttachment(
       token = session.token,
-      parentType = "lecture",
+      parentType = parentType,
       parentId = targetId,
       fileName = fileName,
       mimeType = mimeType,
@@ -708,6 +712,31 @@ class StudyHubRepository(
     }
     refreshFromDb()
     uploaded
+  }
+
+  suspend fun uploadFileForLecture(
+    lectureId: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+  ): Result<AttachmentDto> = uploadAttachment("lecture", lectureId, fileName, mimeType, bytes)
+
+  fun attachmentCacheStats(): Pair<Int, Long> {
+    val dir = File(context.cacheDir, "attachments")
+    if (!dir.exists()) return 0 to 0L
+    val files = dir.listFiles()?.filter { it.isFile } ?: return 0 to 0L
+    return files.size to files.sumOf { it.length() }
+  }
+
+  fun clearAttachmentCache(): Int {
+    val dir = File(context.cacheDir, "attachments")
+    if (!dir.exists()) return 0
+    val files = dir.listFiles()?.filter { it.isFile } ?: return 0
+    var removed = 0
+    for (f in files) {
+      if (f.delete()) removed++
+    }
+    return removed
   }
 
   suspend fun deleteAttachment(attachmentId: String): Result<Unit> = runCatching {

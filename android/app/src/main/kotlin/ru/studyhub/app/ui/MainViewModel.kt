@@ -32,8 +32,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val authError = MutableStateFlow<String?>(null)
   private val _busyAttachmentId = MutableStateFlow<String?>(null)
   val busyAttachmentId: StateFlow<String?> = _busyAttachmentId.asStateFlow()
-  private val _uploadingLectureId = MutableStateFlow<String?>(null)
-  val uploadingLectureId: StateFlow<String?> = _uploadingLectureId.asStateFlow()
+  private val _uploadingKey = MutableStateFlow<String?>(null)
+  val uploadingKey: StateFlow<String?> = _uploadingKey.asStateFlow()
   private val _transcribingAttachmentId = MutableStateFlow<String?>(null)
   val transcribingAttachmentId: StateFlow<String?> = _transcribingAttachmentId.asStateFlow()
 
@@ -265,16 +265,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
   }
 
-  fun uploadLectureFile(
-    lectureId: String,
+  fun uploadAttachment(
+    parentType: String?,
+    parentId: String?,
     fileName: String,
     mimeType: String,
     bytes: ByteArray,
+    uploadKey: String,
   ) {
     viewModelScope.launch {
-      _uploadingLectureId.value = lectureId
-      val res = repo.uploadFileForLecture(lectureId, fileName, mimeType, bytes)
-      _uploadingLectureId.value = null
+      _uploadingKey.value = uploadKey
+      val res = repo.uploadAttachment(parentType, parentId, fileName, mimeType, bytes)
+      _uploadingKey.value = null
       res.onSuccess {
         Toast.makeText(getApplication(), "Файл «$fileName» загружен", Toast.LENGTH_SHORT).show()
       }
@@ -282,6 +284,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Toast.makeText(getApplication(), e.message ?: "Ошибка загрузки файла", Toast.LENGTH_LONG).show()
       }
     }
+  }
+
+  fun uploadLectureFile(
+    lectureId: String,
+    fileName: String,
+    mimeType: String,
+    bytes: ByteArray,
+  ) = uploadAttachment("lecture", lectureId, fileName, mimeType, bytes, "lecture:$lectureId")
+
+  fun attachmentCacheStats(): Pair<Int, Long> = repo.attachmentCacheStats()
+
+  fun clearAttachmentCache() {
+    val removed = repo.clearAttachmentCache()
+    val msg = if (removed > 0) "Кэш файлов очищен ($removed)" else "Кэш файлов уже пуст"
+    Toast.makeText(getApplication(), msg, Toast.LENGTH_SHORT).show()
   }
 
   fun deleteAttachment(attachmentId: String) {

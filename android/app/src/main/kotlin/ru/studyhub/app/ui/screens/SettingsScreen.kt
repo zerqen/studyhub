@@ -50,6 +50,7 @@ import ru.studyhub.app.data.AuthSession
 import ru.studyhub.app.data.StudyHubApi
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.ui.components.StudyCard
+import ru.studyhub.app.ui.components.formatBytes
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
 import ru.studyhub.app.widget.DeadlinesWidgetReceiver
 
@@ -60,6 +61,9 @@ private val EVENING_SLOTS = listOf(19 to 0, 20 to 0, 21 to 0, 22 to 0)
 fun SettingsScreen(
   session: AuthSession,
   snapshot: StudyHubSnapshot,
+  cachedFilesCount: Int,
+  cachedFilesBytes: Long,
+  onClearFileCache: () -> Unit,
   onBack: () -> Unit,
   onSyncNow: () -> Unit,
   onThemeChange: (String) -> Unit,
@@ -151,9 +155,18 @@ fun SettingsScreen(
             color = colors.muted,
           )
           Text(
-            text = "В кеше: ${snapshot.tasks.size} задач, ${snapshot.questions.size} карточек, ${snapshot.notes.size} заметок, ${snapshot.lectures.size} лекций · Очередь: ${snapshot.pendingOpsCount}",
+            text = "В кеше: ${snapshot.tasks.size} задач, ${snapshot.questions.size} карточек, ${snapshot.notes.size} заметок, ${snapshot.lectures.size} лекций, ${snapshot.attachments.size} файлов · Очередь: ${snapshot.pendingOpsCount}",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.fg,
+          )
+          Text(
+            text = if (cachedFilesCount > 0) {
+              "Скачанные файлы на телефоне: $cachedFilesCount (${formatBytes(cachedFilesBytes)})"
+            } else {
+              "Скачанные файлы на телефоне: 0"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.muted,
           )
           if (!snapshot.lastError.isNullOrBlank()) {
             Text(snapshot.lastError, style = MaterialTheme.typography.bodyMedium, color = colors.urgent)
@@ -169,6 +182,15 @@ fun SettingsScreen(
               if (snapshot.isSyncing) "Синхронизация…" else "Синхронизировать сейчас",
               color = Color.White,
             )
+          }
+          if (cachedFilesCount > 0) {
+            OutlinedButton(
+              onClick = onClearFileCache,
+              shape = RoundedCornerShape(12.dp),
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Text("Очистить кэш файлов (${formatBytes(cachedFilesBytes)})")
+            }
           }
         }
       }

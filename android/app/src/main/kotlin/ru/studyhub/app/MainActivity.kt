@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
 private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
   val state by vm.uiState.collectAsStateWithLifecycle()
   val busyAttachmentId by vm.busyAttachmentId.collectAsStateWithLifecycle()
-  val uploadingLectureId by vm.uploadingLectureId.collectAsStateWithLifecycle()
+  val uploadingKey by vm.uploadingKey.collectAsStateWithLifecycle()
   val transcribingAttachmentId by vm.transcribingAttachmentId.collectAsStateWithLifecycle()
   val context = LocalContext.current
   val openAttachment: (AttachmentDto) -> Unit = { att ->
@@ -141,9 +141,16 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
 
           if (showSettings) {
             BackHandler { showSettings = false }
+            var cacheStats by remember(state.snapshot.attachments) { mutableStateOf(vm.attachmentCacheStats()) }
             SettingsScreen(
               session = state.session,
               snapshot = state.snapshot,
+              cachedFilesCount = cacheStats.first,
+              cachedFilesBytes = cacheStats.second,
+              onClearFileCache = {
+                vm.clearAttachmentCache()
+                cacheStats = vm.attachmentCacheStats()
+              },
               onBack = { showSettings = false },
               onSyncNow = vm::syncNow,
               onThemeChange = vm::setThemeMode,
@@ -262,6 +269,12 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
                   },
                   onToggleTask = vm::toggleTaskDone,
                   onOpenTask = { selectedTaskId = it.id },
+                  busyAttachmentId = busyAttachmentId,
+                  uploadingKey = uploadingKey,
+                  isAttachmentCached = vm::isAttachmentCached,
+                  onOpenAttachment = openAttachment,
+                  onUploadFile = vm::uploadAttachment,
+                  onDeleteAttachment = vm::deleteAttachment,
                 )
                 AppTab.CALENDAR -> CalendarScreen(
                   session = state.session,
@@ -300,8 +313,13 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
               subjects = state.snapshot.subjects,
               attachments = taskAttachments,
               busyAttachmentId = busyAttachmentId,
+              isUploading = uploadingKey == "task:${selectedTask.id}",
               isAttachmentCached = vm::isAttachmentCached,
               onOpenAttachment = openAttachment,
+              onUploadFile = { name, mime, bytes ->
+                vm.uploadAttachment("task", selectedTask.id, name, mime, bytes, "task:${selectedTask.id}")
+              },
+              onDeleteAttachment = vm::deleteAttachment,
               onDismiss = { selectedTaskId = null },
               onToggleDone = { vm.toggleTaskDone(selectedTask.id) },
               onSaveEdits = { title, desc, subj, due, time, prio, kind ->
@@ -333,8 +351,13 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
               subjects = state.snapshot.subjects,
               attachments = noteAttachments,
               busyAttachmentId = busyAttachmentId,
+              isUploading = uploadingKey == "note:${editingNote.id}",
               isAttachmentCached = vm::isAttachmentCached,
               onOpenAttachment = openAttachment,
+              onUploadFile = { name, mime, bytes ->
+                vm.uploadAttachment("note", editingNote.id, name, mime, bytes, "note:${editingNote.id}")
+              },
+              onDeleteAttachment = vm::deleteAttachment,
               onDismiss = { editingNoteId = null },
               onSave = { title, content, subjectId, color, pinned ->
                 vm.updateNote(editingNote.id, title, content, subjectId, color, pinned)
@@ -360,7 +383,7 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
               subject = subject,
               attachments = lectureAttachments,
               busyAttachmentId = busyAttachmentId,
-              isUploading = uploadingLectureId == readingLecture.id,
+              isUploading = uploadingKey == "lecture:${readingLecture.id}",
               transcribingAttachmentId = transcribingAttachmentId,
               isAttachmentCached = vm::isAttachmentCached,
               onDismiss = { readingLectureId = null },
@@ -382,6 +405,8 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
           if (showGlobalSearch) {
             GlobalSearchSheet(
               snapshot = state.snapshot,
+              busyAttachmentId = busyAttachmentId,
+              isAttachmentCached = vm::isAttachmentCached,
               onDismiss = { showGlobalSearch = false },
               onOpenSubject = { subjectId ->
                 selectedSubjectId = subjectId
@@ -391,6 +416,7 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
               onOpenTask = { selectedTaskId = it.id },
               onOpenNote = { editingNoteId = it.id },
               onOpenLecture = { readingLectureId = it.id },
+              onOpenAttachment = openAttachment,
             )
           }
         }

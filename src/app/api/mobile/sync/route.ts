@@ -1,6 +1,7 @@
 import { addDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { mobileError, mobileJson, requireMobileUser } from "@/lib/mobile-auth";
+import { MOBILE_ATTACHMENT_SELECT, serializeMobileAttachment } from "@/lib/mobile-attachment";
 import { getScheduleEvents } from "@/lib/queries";
 import { expandEvents, kindMeta } from "@/lib/schedule";
 import { subjectProgress } from "@/lib/progress";
@@ -127,19 +128,8 @@ export async function GET(req: Request) {
       take: 500,
     }),
     prisma.attachment.findMany({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        originalName: true,
-        mimeType: true,
-        size: true,
-        subjectId: true,
-        taskId: true,
-        noteId: true,
-        lectureId: true,
-        questionId: true,
-        createdAt: true,
-      },
+      where: { userId: user.id, ...(user.avatarPath ? { NOT: { id: user.avatarPath } } : {}) },
+      select: MOBILE_ATTACHMENT_SELECT,
       orderBy: { createdAt: "desc" },
       take: 1000,
     }),
@@ -258,18 +248,7 @@ export async function GET(req: Request) {
       createdAt: l.createdAt.toISOString(),
       updatedAt: l.updatedAt.toISOString(),
     })),
-    attachments: attachments.map((a) => ({
-      id: a.id,
-      originalName: a.originalName,
-      mimeType: a.mimeType,
-      size: a.size,
-      subjectId: a.subjectId,
-      taskId: a.taskId,
-      noteId: a.noteId,
-      lectureId: a.lectureId,
-      questionId: a.questionId,
-      createdAt: a.createdAt.toISOString(),
-    })),
+    attachments: attachments.map(serializeMobileAttachment),
     stats: {
       doneThisWeek,
       openCount: openTasks.length,

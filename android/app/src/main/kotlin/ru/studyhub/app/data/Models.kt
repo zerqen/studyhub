@@ -212,6 +212,11 @@ data class AttachmentDto(
   val lectureId: String? = null,
   val questionId: String? = null,
   val createdAt: String = "",
+  val folder: String = "loose",
+  val folderName: String = "Не прикреплено",
+  val folderColor: String? = null,
+  val folderSelfStudy: Boolean = false,
+  val whereLabel: String = "Не прикреплено",
 )
 
 @Serializable
@@ -241,8 +246,8 @@ data class AttachmentEnvelope(val attachment: AttachmentDto)
 
 @Serializable
 data class BlobPrepareRequest(
-  val parentType: String,
-  val parentId: String,
+  val parentType: String? = null,
+  val parentId: String? = null,
   val name: String,
   val size: Long,
 )

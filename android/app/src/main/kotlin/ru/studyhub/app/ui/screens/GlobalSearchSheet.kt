@@ -36,10 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ru.studyhub.app.data.AttachmentDto
+import ru.studyhub.app.data.FilesViewHelper
 import ru.studyhub.app.data.LectureDto
 import ru.studyhub.app.data.NoteDto
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.TaskDto
+import ru.studyhub.app.ui.components.AttachmentRowItem
 import ru.studyhub.app.ui.components.StudyCard
 import ru.studyhub.app.ui.components.TaskRowItem
 import ru.studyhub.app.ui.components.parseHexColor
@@ -49,12 +52,15 @@ import ru.studyhub.app.ui.theme.StudyHubThemeColors
 @Composable
 fun GlobalSearchSheet(
   snapshot: StudyHubSnapshot,
+  busyAttachmentId: String? = null,
+  isAttachmentCached: (AttachmentDto) -> Boolean = { false },
   onDismiss: () -> Unit,
   onOpenSubject: (String) -> Unit,
   onToggleTask: (String) -> Unit,
   onOpenTask: (TaskDto) -> Unit,
   onOpenNote: (NoteDto) -> Unit,
   onOpenLecture: (LectureDto) -> Unit,
+  onOpenAttachment: (AttachmentDto) -> Unit = {},
 ) {
   val colors = StudyHubThemeColors.current
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -90,6 +96,10 @@ fun GlobalSearchSheet(
     else snapshot.questions.filter {
       it.text.lowercase().contains(q) || (it.answer?.lowercase()?.contains(q) == true)
     }.take(10)
+  }
+  val matchedFiles = remember(snapshot.attachments, q) {
+    if (q.isEmpty()) emptyList()
+    else snapshot.attachments.filter { FilesViewHelper.matchFile(q, it) }.take(10)
   }
 
   ModalBottomSheet(
@@ -144,7 +154,7 @@ fun GlobalSearchSheet(
               Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Мгновенный поиск по всему StudyHub", style = MaterialTheme.typography.titleMedium, color = colors.fg)
                 Text(
-                  text = "Ищет локально по ${snapshot.tasks.size} задачам, ${snapshot.notes.size} заметкам, ${snapshot.lectures.size} лекциям и ${snapshot.questions.size} вопросам.",
+                  text = "Ищет локально по ${snapshot.tasks.size} задачам, ${snapshot.notes.size} заметкам, ${snapshot.lectures.size} лекциям, ${snapshot.questions.size} вопросам и ${snapshot.attachments.size} файлам.",
                   style = MaterialTheme.typography.bodyMedium,
                   color = colors.muted,
                 )
@@ -156,7 +166,8 @@ fun GlobalSearchSheet(
           matchedTasks.isEmpty() &&
           matchedNotes.isEmpty() &&
           matchedLectures.isEmpty() &&
-          matchedQuestions.isEmpty()
+          matchedQuestions.isEmpty() &&
+          matchedFiles.isEmpty()
         ) {
           item {
             StudyCard {
@@ -249,6 +260,18 @@ fun GlobalSearchSheet(
             item { Text("Вопросы (${matchedQuestions.size})", style = MaterialTheme.typography.labelLarge, color = colors.muted) }
             items(matchedQuestions, key = { "q_${it.id}" }) { question ->
               ExpandableQuestionCard(question = question)
+            }
+          }
+
+          if (matchedFiles.isNotEmpty()) {
+            item { Text("Файлы (${matchedFiles.size})", style = MaterialTheme.typography.labelLarge, color = colors.muted) }
+            items(matchedFiles, key = { "f_${it.id}" }) { att ->
+              AttachmentRowItem(
+                attachment = att,
+                isCached = isAttachmentCached(att),
+                isBusy = busyAttachmentId == att.id,
+                onOpen = { onOpenAttachment(att) },
+              )
             }
           }
         }
