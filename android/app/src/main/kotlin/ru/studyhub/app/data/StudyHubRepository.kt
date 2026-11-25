@@ -63,10 +63,9 @@ class StudyHubRepository(
     runCatching { DeadlinesWidgetUpdater.updateAll(context) }
   }
 
-  suspend fun login(serverUrl: String, email: String, password: String): Result<Unit> = runCatching {
-    val normalized = normalizeUrl(serverUrl)
-    val res = api.login(normalized, email, password)
-    sessionStore.saveLogin(normalized, res.token, res.user)
+  suspend fun login(email: String, password: String): Result<Unit> = runCatching {
+    val res = api.login(email, password)
+    sessionStore.saveLogin(res.token, res.user)
     syncNow()
     SyncWorker.schedulePeriodic(context)
     DigestScheduler.rescheduleAll(context, sessionStore.current())
@@ -144,7 +143,7 @@ class StudyHubRepository(
       }
 
       // 2. Pull fresh snapshot from server
-      val remote = api.sync(session.serverUrl, session.token)
+      val remote = api.sync(session.token)
       withContext(Dispatchers.IO) {
         db.replaceServerSnapshot(
           subjects = remote.subjects,
@@ -179,24 +178,23 @@ class StudyHubRepository(
     when (op.opType) {
       OP_CREATE_TASK -> {
         val req = api.json.decodeFromString<CreateTaskRequest>(op.payloadJson)
-        val created = api.createTask(session.serverUrl, session.token, req)
+        val created = api.createTask(session.token, req)
         withContext(Dispatchers.IO) { db.remapTaskId(op.entityId, created) }
       }
       OP_UPDATE_TASK -> {
         if (op.entityId.startsWith("local_")) return
         val req = api.json.decodeFromString<UpdateTaskRequest>(op.payloadJson)
-        val updated = api.updateTask(session.serverUrl, session.token, op.entityId, req)
+        val updated = api.updateTask(session.token, op.entityId, req)
         withContext(Dispatchers.IO) { db.upsertTask(updated) }
       }
       OP_DELETE_TASK -> {
         if (op.entityId.startsWith("local_")) return
-        api.deleteTask(session.serverUrl, session.token, op.entityId)
+        api.deleteTask(session.token, op.entityId)
       }
       OP_CREATE_SUBTASK -> {
         val payload = api.json.decodeFromString<CreateSubtaskOpPayload>(op.payloadJson)
         if (payload.taskId.startsWith("local_")) return
         val created = api.createSubtask(
-          session.serverUrl,
           session.token,
           payload.taskId,
           CreateSubtaskRequest(title = payload.title),
@@ -206,46 +204,46 @@ class StudyHubRepository(
       OP_UPDATE_SUBTASK -> {
         if (op.entityId.startsWith("local_")) return
         val req = api.json.decodeFromString<UpdateSubtaskRequest>(op.payloadJson)
-        val updated = api.updateSubtask(session.serverUrl, session.token, op.entityId, req)
+        val updated = api.updateSubtask(session.token, op.entityId, req)
         withContext(Dispatchers.IO) { db.upsertSubtask(updated) }
       }
       OP_DELETE_SUBTASK -> {
         if (op.entityId.startsWith("local_")) return
-        api.deleteSubtask(session.serverUrl, session.token, op.entityId)
+        api.deleteSubtask(session.token, op.entityId)
       }
       OP_REVIEW_QUESTION -> {
         val req = api.json.decodeFromString<ReviewRequest>(op.payloadJson)
-        api.reviewQuestion(session.serverUrl, session.token, req.questionId, req.grade)
+        api.reviewQuestion(session.token, req.questionId, req.grade)
       }
       OP_CREATE_NOTE -> {
         val req = api.json.decodeFromString<CreateNoteRequest>(op.payloadJson)
-        val created = api.createNote(session.serverUrl, session.token, req)
+        val created = api.createNote(session.token, req)
         withContext(Dispatchers.IO) { db.remapNoteId(op.entityId, created) }
       }
       OP_UPDATE_NOTE -> {
         if (op.entityId.startsWith("local_note_")) return
         val req = api.json.decodeFromString<UpdateNoteRequest>(op.payloadJson)
-        val updated = api.updateNote(session.serverUrl, session.token, op.entityId, req)
+        val updated = api.updateNote(session.token, op.entityId, req)
         withContext(Dispatchers.IO) { db.upsertNote(updated) }
       }
       OP_DELETE_NOTE -> {
         if (op.entityId.startsWith("local_note_")) return
-        api.deleteNote(session.serverUrl, session.token, op.entityId)
+        api.deleteNote(session.token, op.entityId)
       }
       OP_CREATE_LECTURE -> {
         val req = api.json.decodeFromString<CreateLectureRequest>(op.payloadJson)
-        val created = api.createLecture(session.serverUrl, session.token, req)
+        val created = api.createLecture(session.token, req)
         withContext(Dispatchers.IO) { db.remapLectureId(op.entityId, created) }
       }
       OP_UPDATE_LECTURE -> {
         if (op.entityId.startsWith("local_lec_")) return
         val req = api.json.decodeFromString<UpdateLectureRequest>(op.payloadJson)
-        val updated = api.updateLecture(session.serverUrl, session.token, op.entityId, req)
+        val updated = api.updateLecture(session.token, op.entityId, req)
         withContext(Dispatchers.IO) { db.upsertLecture(updated) }
       }
       OP_DELETE_LECTURE -> {
         if (op.entityId.startsWith("local_lec_")) return
-        api.deleteLecture(session.serverUrl, session.token, op.entityId)
+        api.deleteLecture(session.token, op.entityId)
       }
     }
   }
@@ -673,7 +671,7 @@ class StudyHubRepository(
     if (dest.exists() && dest.length() > 0L) return@runCatching dest
     val session = sessionStore.current()
     if (!session.isLoggedIn) throw IOException("Нужна авторизация")
-    api.downloadAttachment(session.serverUrl, session.token, attachment.id, dest)
+    api.downloadAttachment(session.token, attachment.id, dest)
     dest
   }
 
@@ -695,7 +693,6 @@ class StudyHubRepository(
       targetId = matched.id
     }
     val uploaded = api.uploadAttachment(
-      serverUrl = session.serverUrl,
       token = session.token,
       parentType = "lecture",
       parentId = targetId,
@@ -717,7 +714,7 @@ class StudyHubRepository(
     val session = sessionStore.current()
     if (!session.isLoggedIn) throw IOException("Нужна авторизация")
     val existing = _snapshot.value.attachments.firstOrNull { it.id == attachmentId }
-    api.deleteAttachment(session.serverUrl, session.token, attachmentId)
+    api.deleteAttachment(session.token, attachmentId)
     withContext(Dispatchers.IO) {
       db.deleteAttachmentLocal(attachmentId)
       if (existing != null) cachedFileFor(existing).delete()
@@ -729,7 +726,6 @@ class StudyHubRepository(
     val session = sessionStore.current()
     if (!session.isLoggedIn) throw IOException("Нужна авторизация")
     val nextTranscript = api.transcribeLectureAudio(
-      serverUrl = session.serverUrl,
       token = session.token,
       lectureId = lectureId,
       attachmentId = attachmentId,
@@ -742,14 +738,5 @@ class StudyHubRepository(
       refreshFromDb()
     }
     nextTranscript
-  }
-
-  private fun normalizeUrl(raw: String): String {
-    val trimmed = raw.trim().trimEnd('/')
-    return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      trimmed
-    } else {
-      "https://$trimmed"
-    }
   }
 }

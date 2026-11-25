@@ -64,15 +64,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
   }
 
-  fun login(serverUrl: String, email: String, password: String) {
-    if (serverUrl.isBlank() || email.isBlank() || password.isBlank()) {
-      authError.value = "Заполни адрес сервера, email и пароль"
+  fun login(email: String, password: String) {
+    if (email.isBlank() || password.isBlank()) {
+      authError.value = "Заполни email и пароль"
       return
     }
     viewModelScope.launch {
       authLoading.value = true
       authError.value = null
-      val res = repo.login(serverUrl, email, password)
+      val res = repo.login(email, password)
       authLoading.value = false
       res.onFailure { e ->
         authError.value = e.message ?: "Не удалось войти"

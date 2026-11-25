@@ -45,13 +45,11 @@ import ru.studyhub.app.ui.theme.StudyHubThemeColors
 
 @Composable
 fun LoginScreen(
-  initialServerUrl: String,
   isLoading: Boolean,
   error: String?,
-  onLogin: (serverUrl: String, email: String, password: String) -> Unit,
+  onLogin: (email: String, password: String) -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
-  var serverUrl by rememberSaveable { mutableStateOf(initialServerUrl.ifBlank { "https://studyhub-lime.vercel.app" }) }
   var email by rememberSaveable { mutableStateOf("") }
   var password by rememberSaveable { mutableStateOf("") }
   var showPassword by rememberSaveable { mutableStateOf(false) }
@@ -86,19 +84,6 @@ fun LoginScreen(
         modifier = Modifier.padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
       ) {
-        OutlinedTextField(
-          value = serverUrl,
-          onValueChange = { serverUrl = it },
-          label = { Text("Адрес твоего StudyHub") },
-          placeholder = { Text("https://studyhub.vercel.app") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-          keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Uri,
-            imeAction = ImeAction.Next,
-          ),
-        )
-
         OutlinedTextField(
           value = email,
           onValueChange = { email = it },
@@ -148,7 +133,7 @@ fun LoginScreen(
         }
 
         Button(
-          onClick = { onLogin(serverUrl, email, password) },
+          onClick = { onLogin(email, password) },
           enabled = !isLoading,
           modifier = Modifier
             .fillMaxWidth()

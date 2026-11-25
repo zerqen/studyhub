@@ -47,6 +47,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import ru.studyhub.app.data.AuthSession
+import ru.studyhub.app.data.StudyHubApi
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.ui.components.StudyCard
 import ru.studyhub.app.ui.theme.StudyHubThemeColors
@@ -134,7 +135,7 @@ fun SettingsScreen(
           Text(session.userEmail, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
           HorizontalDivider(color = colors.line, modifier = Modifier.padding(vertical = 6.dp))
           Text("Сервер", style = MaterialTheme.typography.labelMedium, color = colors.muted)
-          Text(session.serverUrl, style = MaterialTheme.typography.bodyMedium, color = colors.fg)
+          Text(StudyHubApi.BASE_URL, style = MaterialTheme.typography.bodyMedium, color = colors.fg)
         }
       }
     }

@@ -15,7 +15,6 @@ private val Context.sessionDataStore by preferencesDataStore(name = "studyhub_se
 
 class SessionStore(private val context: Context) {
   companion object {
-    private val KEY_SERVER_URL = stringPreferencesKey("server_url")
     private val KEY_TOKEN = stringPreferencesKey("auth_token")
     private val KEY_USER_ID = stringPreferencesKey("user_id")
     private val KEY_USER_NAME = stringPreferencesKey("user_name")
@@ -35,7 +34,6 @@ class SessionStore(private val context: Context) {
 
   val sessionFlow: Flow<AuthSession> = context.sessionDataStore.data.map { p ->
     AuthSession(
-      serverUrl = p[KEY_SERVER_URL].orEmpty(),
       token = p[KEY_TOKEN].orEmpty(),
       userId = p[KEY_USER_ID].orEmpty(),
       userName = p[KEY_USER_NAME].orEmpty(),
@@ -56,10 +54,8 @@ class SessionStore(private val context: Context) {
 
   suspend fun current(): AuthSession = sessionFlow.first()
 
-  suspend fun saveLogin(serverUrl: String, token: String, user: MobileUserDto) {
-    val cleanUrl = serverUrl.trim().trimEnd('/')
+  suspend fun saveLogin(token: String, user: MobileUserDto) {
     context.sessionDataStore.edit { p ->
-      p[KEY_SERVER_URL] = cleanUrl
       p[KEY_TOKEN] = token
       p[KEY_USER_ID] = user.id
       p[KEY_USER_NAME] = user.name
@@ -109,7 +105,6 @@ class SessionStore(private val context: Context) {
 
   suspend fun clearAuth() {
     context.sessionDataStore.edit { p ->
-      val savedUrl = p[KEY_SERVER_URL].orEmpty()
       val savedTheme = p[KEY_THEME_MODE] ?: "system"
       val savedShowLessons = p[KEY_SHOW_LESSONS] ?: false
       val mEn = p[KEY_NOTIF_MORNING_ENABLED] ?: true
@@ -119,7 +114,6 @@ class SessionStore(private val context: Context) {
       val eH = p[KEY_NOTIF_EVENING_HOUR] ?: 20
       val eM = p[KEY_NOTIF_EVENING_MIN] ?: 0
       p.clear()
-      if (savedUrl.isNotBlank()) p[KEY_SERVER_URL] = savedUrl
       p[KEY_THEME_MODE] = savedTheme
       p[KEY_SHOW_LESSONS] = savedShowLessons
       p[KEY_NOTIF_MORNING_ENABLED] = mEn

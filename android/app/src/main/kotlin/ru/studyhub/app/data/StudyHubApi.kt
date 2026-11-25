@@ -16,6 +16,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class ApiException(val statusCode: Int, message: String) : IOException(message)
 
 class StudyHubApi {
+  companion object {
+    const val BASE_URL = "https://studyhub-lime.vercel.app"
+  }
+
   val json = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
@@ -30,130 +34,126 @@ class StudyHubApi {
     .writeTimeout(90, TimeUnit.SECONDS)
     .build()
 
-  suspend fun login(serverUrl: String, email: String, password: String): LoginResponse =
+  suspend fun login(email: String, password: String): LoginResponse =
     withContext(Dispatchers.IO) {
-      val cleanBase = serverUrl.trim().trimEnd('/')
       val body = json.encodeToString(LoginRequest(email.trim(), password)).toRequestBody(jsonMediaType)
       val req = Request.Builder()
-        .url("$cleanBase/api/mobile/auth/login")
+        .url("$BASE_URL/api/mobile/auth/login")
         .post(body)
         .header("Accept", "application/json")
         .build()
       executeJson(req)
     }
 
-  suspend fun sync(serverUrl: String, token: String): SyncResponse =
+  suspend fun sync(token: String): SyncResponse =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/sync").get().build()
+      val req = authBuilder(token, "/api/mobile/sync").get().build()
       executeJson(req)
     }
 
-  suspend fun createTask(serverUrl: String, token: String, payload: CreateTaskRequest): TaskDto =
+  suspend fun createTask(token: String, payload: CreateTaskRequest): TaskDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/tasks").post(body).build()
+      val req = authBuilder(token, "/api/mobile/tasks").post(body).build()
       executeJson<TaskEnvelope>(req).task
     }
 
-  suspend fun updateTask(serverUrl: String, token: String, id: String, payload: UpdateTaskRequest): TaskDto =
+  suspend fun updateTask(token: String, id: String, payload: UpdateTaskRequest): TaskDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/tasks/$id").patch(body).build()
+      val req = authBuilder(token, "/api/mobile/tasks/$id").patch(body).build()
       executeJson<TaskEnvelope>(req).task
     }
 
-  suspend fun deleteTask(serverUrl: String, token: String, id: String) =
+  suspend fun deleteTask(token: String, id: String) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/tasks/$id").delete().build()
+      val req = authBuilder(token, "/api/mobile/tasks/$id").delete().build()
       executeUnit(req)
     }
 
-  suspend fun createSubtask(serverUrl: String, token: String, taskId: String, payload: CreateSubtaskRequest): SubtaskDto =
+  suspend fun createSubtask(token: String, taskId: String, payload: CreateSubtaskRequest): SubtaskDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/tasks/$taskId/subtasks").post(body).build()
+      val req = authBuilder(token, "/api/mobile/tasks/$taskId/subtasks").post(body).build()
       executeJson<SubtaskEnvelope>(req).subtask
     }
 
-  suspend fun updateSubtask(serverUrl: String, token: String, id: String, payload: UpdateSubtaskRequest): SubtaskDto =
+  suspend fun updateSubtask(token: String, id: String, payload: UpdateSubtaskRequest): SubtaskDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/subtasks/$id").patch(body).build()
+      val req = authBuilder(token, "/api/mobile/subtasks/$id").patch(body).build()
       executeJson<SubtaskEnvelope>(req).subtask
     }
 
-  suspend fun deleteSubtask(serverUrl: String, token: String, id: String) =
+  suspend fun deleteSubtask(token: String, id: String) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/subtasks/$id").delete().build()
+      val req = authBuilder(token, "/api/mobile/subtasks/$id").delete().build()
       executeUnit(req)
     }
 
   suspend fun reviewQuestion(
-    serverUrl: String,
     token: String,
     questionId: String,
     grade: Int,
   ): ReviewResponse =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(ReviewRequest(questionId, grade)).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/review").post(body).build()
+      val req = authBuilder(token, "/api/mobile/review").post(body).build()
       executeJson(req)
     }
 
-  suspend fun createNote(serverUrl: String, token: String, payload: CreateNoteRequest): NoteDto =
+  suspend fun createNote(token: String, payload: CreateNoteRequest): NoteDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/notes").post(body).build()
+      val req = authBuilder(token, "/api/mobile/notes").post(body).build()
       executeJson<NoteEnvelope>(req).note
     }
 
-  suspend fun updateNote(serverUrl: String, token: String, id: String, payload: UpdateNoteRequest): NoteDto =
+  suspend fun updateNote(token: String, id: String, payload: UpdateNoteRequest): NoteDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/notes/$id").patch(body).build()
+      val req = authBuilder(token, "/api/mobile/notes/$id").patch(body).build()
       executeJson<NoteEnvelope>(req).note
     }
 
-  suspend fun deleteNote(serverUrl: String, token: String, id: String) =
+  suspend fun deleteNote(token: String, id: String) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/notes/$id").delete().build()
+      val req = authBuilder(token, "/api/mobile/notes/$id").delete().build()
       executeUnit(req)
     }
 
-  suspend fun createLecture(serverUrl: String, token: String, payload: CreateLectureRequest): LectureDto =
+  suspend fun createLecture(token: String, payload: CreateLectureRequest): LectureDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/lectures").post(body).build()
+      val req = authBuilder(token, "/api/mobile/lectures").post(body).build()
       executeJson<LectureEnvelope>(req).lecture
     }
 
-  suspend fun updateLecture(serverUrl: String, token: String, id: String, payload: UpdateLectureRequest): LectureDto =
+  suspend fun updateLecture(token: String, id: String, payload: UpdateLectureRequest): LectureDto =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$id").patch(body).build()
+      val req = authBuilder(token, "/api/mobile/lectures/$id").patch(body).build()
       executeJson<LectureEnvelope>(req).lecture
     }
 
-  suspend fun deleteLecture(serverUrl: String, token: String, id: String) =
+  suspend fun deleteLecture(token: String, id: String) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$id").delete().build()
+      val req = authBuilder(token, "/api/mobile/lectures/$id").delete().build()
       executeUnit(req)
     }
 
   suspend fun transcribeLectureAudio(
-    serverUrl: String,
     token: String,
     lectureId: String,
     attachmentId: String,
   ): String =
     withContext(Dispatchers.IO) {
       val body = json.encodeToString(TranscribeRequest(attachmentId)).toRequestBody(jsonMediaType)
-      val req = authBuilder(serverUrl, token, "/api/mobile/lectures/$lectureId/transcribe").post(body).build()
+      val req = authBuilder(token, "/api/mobile/lectures/$lectureId/transcribe").post(body).build()
       executeJson<TranscribeResponse>(req).transcript
     }
 
   suspend fun uploadAttachment(
-    serverUrl: String,
     token: String,
     parentType: String,
     parentId: String,
@@ -168,7 +168,7 @@ class StudyHubApi {
         .addFormDataPart("${parentType}Id", parentId)
         .addFormDataPart("file", fileName, bytes.toRequestBody(mediaType))
         .build()
-      val req = authBuilder(serverUrl, token, "/api/mobile/files/upload").post(formBody).build()
+      val req = authBuilder(token, "/api/mobile/files/upload").post(formBody).build()
       return@withContext executeJson<AttachmentEnvelope>(req).attachment
     }
 
@@ -181,12 +181,16 @@ class StudyHubApi {
         size = bytes.size.toLong(),
       ),
     ).toRequestBody(jsonMediaType)
-    val prepReq = authBuilder(serverUrl, token, "/api/mobile/files/blob").post(prepBody).build()
+    val prepReq = authBuilder(token, "/api/mobile/files/blob").post(prepBody).build()
     val grant = executeJson<BlobGrantResponse>(prepReq)
 
+    val cleanPath = grant.pathname.trimStart('/')
+    if (cleanPath.contains("@") || cleanPath.contains("..")) {
+      throw IOException("Некорректный путь загрузки")
+    }
     val blobMedia = runCatching { grant.mimeType.toMediaType() }.getOrDefault("application/octet-stream".toMediaType())
     val putReq = Request.Builder()
-      .url("https://blob.vercel-storage.com/${grant.pathname}")
+      .url("https://blob.vercel-storage.com/$cleanPath")
       .put(bytes.toRequestBody(blobMedia))
       .header("Authorization", "Bearer ${grant.clientToken}")
       .header("x-api-version", "7")
@@ -196,13 +200,13 @@ class StudyHubApi {
     executeUnit(putReq)
 
     val regBody = json.encodeToString(BlobRegisterRequest(grant.uploadReceipt)).toRequestBody(jsonMediaType)
-    val regReq = authBuilder(serverUrl, token, "/api/mobile/files/register").post(regBody).build()
+    val regReq = authBuilder(token, "/api/mobile/files/register").post(regBody).build()
     executeJson<AttachmentEnvelope>(regReq).attachment
   }
 
-  suspend fun downloadAttachment(serverUrl: String, token: String, attachmentId: String, destFile: File) =
+  suspend fun downloadAttachment(token: String, attachmentId: String, destFile: File) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/files/$attachmentId").get().build()
+      val req = authBuilder(token, "/api/mobile/files/$attachmentId").get().build()
       client.newCall(req).execute().use { res ->
         if (!res.isSuccessful) {
           val text = res.body?.string().orEmpty()
@@ -220,16 +224,15 @@ class StudyHubApi {
       }
     }
 
-  suspend fun deleteAttachment(serverUrl: String, token: String, attachmentId: String) =
+  suspend fun deleteAttachment(token: String, attachmentId: String) =
     withContext(Dispatchers.IO) {
-      val req = authBuilder(serverUrl, token, "/api/mobile/files/$attachmentId").delete().build()
+      val req = authBuilder(token, "/api/mobile/files/$attachmentId").delete().build()
       executeUnit(req)
     }
 
-  private fun authBuilder(serverUrl: String, token: String, path: String): Request.Builder {
-    val cleanBase = serverUrl.trim().trimEnd('/')
+  private fun authBuilder(token: String, path: String): Request.Builder {
     return Request.Builder()
-      .url("$cleanBase$path")
+      .url("${BASE_URL}$path")
       .header("Authorization", "Bearer $token")
       .header("Accept", "application/json")
   }

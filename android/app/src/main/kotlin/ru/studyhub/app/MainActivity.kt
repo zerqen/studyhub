@@ -104,7 +104,6 @@ private fun StudyHubRoot(vm: MainViewModel = viewModel()) {
         }
         !state.session.isLoggedIn -> {
           LoginScreen(
-            initialServerUrl = state.session.serverUrl,
             isLoading = state.isAuthLoading,
             error = state.authError,
             onLogin = vm::login,

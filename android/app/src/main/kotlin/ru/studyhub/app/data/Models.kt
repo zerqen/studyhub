@@ -355,7 +355,6 @@ data class PendingOp(
 )
 
 data class AuthSession(
-  val serverUrl: String = "",
   val token: String = "",
   val userId: String = "",
   val userName: String = "",
@@ -372,7 +371,7 @@ data class AuthSession(
   val notifEveningHour: Int = 20,
   val notifEveningMinute: Int = 0,
 ) {
-  val isLoggedIn: Boolean get() = token.isNotBlank() && serverUrl.isNotBlank()
+  val isLoggedIn: Boolean get() = token.isNotBlank()
 }
 
 data class StudyHubSnapshot(
