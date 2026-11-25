@@ -176,6 +176,51 @@ data class ReviewResponse(
 )
 
 @Serializable
+data class NoteDto(
+  val id: String,
+  val title: String,
+  val content: String = "",
+  val subjectId: String? = null,
+  val color: String = "#fde68a",
+  val pinned: Boolean = false,
+  val createdAt: String = "",
+  val updatedAt: String = "",
+)
+
+@Serializable
+data class LectureDto(
+  val id: String,
+  val subjectId: String,
+  val number: Int? = null,
+  val title: String,
+  val date: String? = null,
+  val summary: String = "",
+  val createdAt: String = "",
+  val updatedAt: String = "",
+)
+
+@Serializable
+data class CreateNoteRequest(
+  val title: String,
+  val content: String = "",
+  val subjectId: String? = null,
+  val color: String = "#fde68a",
+  val pinned: Boolean = false,
+)
+
+@Serializable
+data class UpdateNoteRequest(
+  val title: String? = null,
+  val content: String? = null,
+  val subjectId: String? = null,
+  val color: String? = null,
+  val pinned: Boolean? = null,
+)
+
+@Serializable
+data class NoteEnvelope(val note: NoteDto)
+
+@Serializable
 data class SyncResponse(
   val serverTime: String,
   val user: MobileUserDto,
@@ -184,6 +229,8 @@ data class SyncResponse(
   val todayEvents: List<TodayEventDto> = emptyList(),
   val calendarEvents: List<TodayEventDto> = emptyList(),
   val questions: List<QuestionDto> = emptyList(),
+  val notes: List<NoteDto> = emptyList(),
+  val lectures: List<LectureDto> = emptyList(),
   val stats: SyncStatsDto = SyncStatsDto(),
 )
 
@@ -252,6 +299,12 @@ data class AuthSession(
   val dueReviewCount: Int = 0,
   val themeMode: String = "system",
   val showLessons: Boolean = false,
+  val notifMorningEnabled: Boolean = true,
+  val notifMorningHour: Int = 8,
+  val notifMorningMinute: Int = 0,
+  val notifEveningEnabled: Boolean = true,
+  val notifEveningHour: Int = 20,
+  val notifEveningMinute: Int = 0,
 ) {
   val isLoggedIn: Boolean get() = token.isNotBlank() && serverUrl.isNotBlank()
 }
@@ -262,6 +315,8 @@ data class StudyHubSnapshot(
   val todayEvents: List<TodayEventDto> = emptyList(),
   val calendarEvents: List<TodayEventDto> = emptyList(),
   val questions: List<QuestionDto> = emptyList(),
+  val notes: List<NoteDto> = emptyList(),
+  val lectures: List<LectureDto> = emptyList(),
   val pendingOpsCount: Int = 0,
   val isSyncing: Boolean = false,
   val lastError: String? = null,

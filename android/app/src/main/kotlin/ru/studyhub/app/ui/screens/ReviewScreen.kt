@@ -56,6 +56,7 @@ import ru.studyhub.app.data.SrsEngine
 import ru.studyhub.app.data.SrsState
 import ru.studyhub.app.data.StudyHubSnapshot
 import ru.studyhub.app.data.SubjectDto
+import ru.studyhub.app.ui.components.MarkdownMathText
 import ru.studyhub.app.ui.components.StudyCard
 import ru.studyhub.app.ui.components.SyncStatusPill
 import ru.studyhub.app.ui.components.parseHexColor
@@ -516,19 +517,17 @@ private fun ActiveReviewSessionView(
             }
           }
 
-          Text(
-            text = card.text,
-            style = MaterialTheme.typography.titleLarge,
-            color = colors.fg,
+          MarkdownMathText(
+            markdown = card.text,
+            baseStyle = MaterialTheme.typography.titleLarge,
           )
 
           if (revealed) {
             HorizontalDivider(color = colors.line)
             if (!card.answer.isNullOrBlank()) {
-              Text(
-                text = card.answer,
-                style = MaterialTheme.typography.bodyLarge,
-                color = colors.fg,
+              MarkdownMathText(
+                markdown = card.answer,
+                baseStyle = MaterialTheme.typography.bodyLarge,
               )
             } else {
               Text(
@@ -545,10 +544,9 @@ private fun ActiveReviewSessionView(
                   .background(colors.subtle)
                   .padding(12.dp),
               ) {
-                Text(
-                  text = card.explanation,
-                  style = MaterialTheme.typography.bodyMedium,
-                  color = colors.muted,
+                MarkdownMathText(
+                  markdown = card.explanation,
+                  baseStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.muted),
                 )
               }
             }

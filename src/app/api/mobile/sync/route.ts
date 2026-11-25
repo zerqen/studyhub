@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     -((new Date(mskStart.getTime() + 3 * 3_600_000).getUTCDay() + 6) % 7),
   );
 
-  const [subjects, tasks, rawEvents, calRawEvents, questions, dueReviewCount] = await Promise.all([
+  const [subjects, tasks, rawEvents, calRawEvents, questions, notes, lectures, dueReviewCount] = await Promise.all([
     prisma.subject.findMany({
       where: { userId: user.id, archived: false, selfStudy: false },
       select: {
@@ -94,6 +94,36 @@ export async function GET(req: Request) {
       },
       orderBy: [{ srsDue: { sort: "asc", nulls: "last" } }, { sortOrder: "asc" }],
       take: 1500,
+    }),
+    prisma.note.findMany({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        subjectId: true,
+        color: true,
+        pinned: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
+      take: 500,
+    }),
+    prisma.lecture.findMany({
+      where: { userId: user.id, subject: { archived: false } },
+      select: {
+        id: true,
+        subjectId: true,
+        number: true,
+        title: true,
+        date: true,
+        summary: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: [{ number: "desc" }, { date: "desc" }, { updatedAt: "desc" }],
+      take: 500,
     }),
     prisma.question.count({
       where: { userId: user.id, srsReps: { gt: 0 }, srsDue: { lte: now } },
@@ -188,6 +218,26 @@ export async function GET(req: Request) {
       srsReps: q.srsReps,
       srsLapses: q.srsLapses,
       sortOrder: q.sortOrder,
+    })),
+    notes: notes.map((n) => ({
+      id: n.id,
+      title: n.title,
+      content: n.content,
+      subjectId: n.subjectId,
+      color: n.color,
+      pinned: n.pinned,
+      createdAt: n.createdAt.toISOString(),
+      updatedAt: n.updatedAt.toISOString(),
+    })),
+    lectures: lectures.map((l) => ({
+      id: l.id,
+      subjectId: l.subjectId,
+      number: l.number,
+      title: l.title,
+      date: l.date ? l.date.toISOString() : null,
+      summary: l.summary,
+      createdAt: l.createdAt.toISOString(),
+      updatedAt: l.updatedAt.toISOString(),
     })),
     stats: {
       doneThisWeek,

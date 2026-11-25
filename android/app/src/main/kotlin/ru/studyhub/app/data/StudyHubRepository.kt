@@ -14,6 +14,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import ru.studyhub.app.notifications.DigestBuilder
+import ru.studyhub.app.notifications.DigestNotifier
+import ru.studyhub.app.notifications.DigestScheduler
 import ru.studyhub.app.widget.DeadlinesWidgetUpdater
 
 @Serializable
@@ -36,6 +39,9 @@ class StudyHubRepository(
     const val OP_UPDATE_SUBTASK = "UPDATE_SUBTASK"
     const val OP_DELETE_SUBTASK = "DELETE_SUBTASK"
     const val OP_REVIEW_QUESTION = "REVIEW_QUESTION"
+    const val OP_CREATE_NOTE = "CREATE_NOTE"
+    const val OP_UPDATE_NOTE = "UPDATE_NOTE"
+    const val OP_DELETE_NOTE = "DELETE_NOTE"
   }
 
   private val syncMutex = Mutex()
@@ -59,6 +65,7 @@ class StudyHubRepository(
     sessionStore.saveLogin(normalized, res.token, res.user)
     syncNow()
     SyncWorker.schedulePeriodic(context)
+    DigestScheduler.rescheduleAll(context, sessionStore.current())
   }
 
   suspend fun logout() {
@@ -66,6 +73,7 @@ class StudyHubRepository(
       db.clearAll()
     }
     sessionStore.clearAuth()
+    DigestScheduler.rescheduleAll(context, sessionStore.current())
     refreshFromDb(error = null)
     notifyWidgets()
   }
@@ -76,6 +84,32 @@ class StudyHubRepository(
 
   suspend fun setShowLessons(show: Boolean) {
     sessionStore.setShowLessons(show)
+  }
+
+  suspend fun updateNotificationPrefs(
+    morningEnabled: Boolean,
+    morningHour: Int,
+    morningMinute: Int,
+    eveningEnabled: Boolean,
+    eveningHour: Int,
+    eveningMinute: Int,
+  ) {
+    sessionStore.saveNotificationPrefs(
+      morningEnabled,
+      morningHour,
+      morningMinute,
+      eveningEnabled,
+      eveningHour,
+      eveningMinute,
+    )
+    DigestScheduler.rescheduleAll(context, sessionStore.current())
+  }
+
+  suspend fun sendTestNotification() {
+    val session = sessionStore.current()
+    val snap = _snapshot.value
+    val content = DigestBuilder.buildTest(snap, session.showLessons)
+    DigestNotifier.show(context, DigestNotifier.TEST_ID, content)
   }
 
   suspend fun syncNow(): Result<Unit> = syncMutex.withLock {
@@ -94,7 +128,7 @@ class StudyHubRepository(
           if (e.statusCode == 401 || e.statusCode == 403) {
             throw e
           }
-          if (e.statusCode == 404 && (op.opType == OP_DELETE_TASK || op.opType == OP_DELETE_SUBTASK)) {
+          if (e.statusCode == 404 && (op.opType == OP_DELETE_TASK || op.opType == OP_DELETE_SUBTASK || op.opType == OP_DELETE_NOTE)) {
             withContext(Dispatchers.IO) { db.removePendingOp(op.id) }
           } else if (e.statusCode in 400..499) {
             // Drop invalid client op so queue doesn't block forever
@@ -114,6 +148,8 @@ class StudyHubRepository(
           todayEvents = remote.todayEvents,
           calendarEvents = remote.calendarEvents,
           questions = remote.questions,
+          notes = remote.notes,
+          lectures = remote.lectures,
         )
       }
       sessionStore.updateSyncMeta(remote.user, remote.stats, System.currentTimeMillis())
@@ -175,6 +211,21 @@ class StudyHubRepository(
       OP_REVIEW_QUESTION -> {
         val req = api.json.decodeFromString<ReviewRequest>(op.payloadJson)
         api.reviewQuestion(session.serverUrl, session.token, req.questionId, req.grade)
+      }
+      OP_CREATE_NOTE -> {
+        val req = api.json.decodeFromString<CreateNoteRequest>(op.payloadJson)
+        val created = api.createNote(session.serverUrl, session.token, req)
+        withContext(Dispatchers.IO) { db.remapNoteId(op.entityId, created) }
+      }
+      OP_UPDATE_NOTE -> {
+        if (op.entityId.startsWith("local_note_")) return
+        val req = api.json.decodeFromString<UpdateNoteRequest>(op.payloadJson)
+        val updated = api.updateNote(session.serverUrl, session.token, op.entityId, req)
+        withContext(Dispatchers.IO) { db.upsertNote(updated) }
+      }
+      OP_DELETE_NOTE -> {
+        if (op.entityId.startsWith("local_note_")) return
+        api.deleteNote(session.serverUrl, session.token, op.entityId)
       }
     }
   }
@@ -386,6 +437,95 @@ class StudyHubRepository(
         questionId,
         api.json.encodeToString(ReviewRequest(questionId, clampedGrade)),
       )
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  suspend fun createNote(
+    title: String,
+    content: String,
+    subjectId: String?,
+    color: String,
+    pinned: Boolean,
+  ) {
+    val cleanTitle = title.trim().ifBlank { "Без названия" }
+    val nowIso = Instant.now().toString()
+    val localId = "local_note_${UUID.randomUUID()}"
+    val note = NoteDto(
+      id = localId,
+      title = cleanTitle,
+      content = content,
+      subjectId = subjectId?.ifBlank { null },
+      color = color,
+      pinned = pinned,
+      createdAt = nowIso,
+      updatedAt = nowIso,
+    )
+    val req = CreateNoteRequest(
+      title = note.title,
+      content = note.content,
+      subjectId = note.subjectId,
+      color = note.color,
+      pinned = note.pinned,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertNote(note)
+      db.enqueueOp(OP_CREATE_NOTE, localId, api.json.encodeToString(req))
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  suspend fun updateNote(
+    noteId: String,
+    title: String,
+    content: String,
+    subjectId: String?,
+    color: String,
+    pinned: Boolean,
+  ) {
+    val existing = _snapshot.value.notes.firstOrNull { it.id == noteId } ?: return
+    val cleanTitle = title.trim().ifBlank { "Без названия" }
+    val updated = existing.copy(
+      title = cleanTitle,
+      content = content,
+      subjectId = subjectId?.ifBlank { null },
+      color = color,
+      pinned = pinned,
+      updatedAt = Instant.now().toString(),
+    )
+    val req = UpdateNoteRequest(
+      title = updated.title,
+      content = updated.content,
+      subjectId = updated.subjectId ?: "",
+      color = updated.color,
+      pinned = updated.pinned,
+    )
+    withContext(Dispatchers.IO) {
+      db.upsertNote(updated)
+      db.enqueueOp(OP_UPDATE_NOTE, noteId, api.json.encodeToString(req))
+    }
+    refreshFromDb()
+    syncNow()
+  }
+
+  suspend fun toggleNotePinned(noteId: String) {
+    val existing = _snapshot.value.notes.firstOrNull { it.id == noteId } ?: return
+    updateNote(
+      noteId = existing.id,
+      title = existing.title,
+      content = existing.content,
+      subjectId = existing.subjectId,
+      color = existing.color,
+      pinned = !existing.pinned,
+    )
+  }
+
+  suspend fun deleteNote(noteId: String) {
+    withContext(Dispatchers.IO) {
+      db.deleteNoteLocal(noteId)
+      db.enqueueOp(OP_DELETE_NOTE, noteId, "{}")
     }
     refreshFromDb()
     syncNow()

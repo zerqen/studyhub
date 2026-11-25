@@ -1,5 +1,6 @@
 package ru.studyhub.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,10 +20,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +64,9 @@ fun HomeScreen(
   onOpenCreateTask: () -> Unit,
   onOpenAllTasks: () -> Unit,
   onOpenReview: () -> Unit,
+  onOpenSearch: () -> Unit,
+  onOpenSettings: () -> Unit,
+  onOpenSubject: (String) -> Unit,
 ) {
   val colors = StudyHubThemeColors.current
   val subjectsById = remember(snapshot.subjects) { snapshot.subjects.associateBy { it.id } }
@@ -101,7 +108,13 @@ fun HomeScreen(
               color = colors.fg,
             )
           }
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          IconButton(onClick = onOpenSearch) {
+            Icon(Icons.Rounded.Search, contentDescription = "Поиск", tint = colors.fg)
+          }
+          IconButton(onClick = onOpenSettings) {
+            Icon(Icons.Rounded.Settings, contentDescription = "Настройки", tint = colors.fg)
+          }
           SyncStatusPill(
             isSyncing = snapshot.isSyncing,
             pendingOpsCount = snapshot.pendingOpsCount,
@@ -305,7 +318,11 @@ fun HomeScreen(
 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
               items(snapshot.subjects, key = { it.id }) { subject ->
-                SubjectTile(subject = subject, tasks = snapshot.tasks)
+                SubjectTile(
+                  subject = subject,
+                  tasks = snapshot.tasks,
+                  onClick = { onOpenSubject(subject.id) },
+                )
               }
             }
           }
@@ -458,7 +475,7 @@ private fun SessionExamsCard(exams: List<SubjectDto>) {
 }
 
 @Composable
-private fun SubjectTile(subject: SubjectDto, tasks: List<TaskDto>) {
+private fun SubjectTile(subject: SubjectDto, tasks: List<TaskDto>, onClick: () -> Unit) {
   val colors = StudyHubThemeColors.current
   val subColor = parseHexColor(subject.color, colors.accent)
   val nearest = remember(tasks, subject.id) {
@@ -479,7 +496,7 @@ private fun SubjectTile(subject: SubjectDto, tasks: List<TaskDto>) {
     }
   }
 
-  StudyCard(modifier = Modifier.width(210.dp)) {
+  StudyCard(modifier = Modifier.width(210.dp).clickable(onClick = onClick)) {
     Row(
       modifier = Modifier.padding(12.dp),
       verticalAlignment = Alignment.CenterVertically,

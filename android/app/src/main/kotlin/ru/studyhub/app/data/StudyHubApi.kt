@@ -98,6 +98,26 @@ class StudyHubApi {
       executeJson(req)
     }
 
+  suspend fun createNote(serverUrl: String, token: String, payload: CreateNoteRequest): NoteDto =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/notes").post(body).build()
+      executeJson<NoteEnvelope>(req).note
+    }
+
+  suspend fun updateNote(serverUrl: String, token: String, id: String, payload: UpdateNoteRequest): NoteDto =
+    withContext(Dispatchers.IO) {
+      val body = json.encodeToString(payload).toRequestBody(jsonMediaType)
+      val req = authBuilder(serverUrl, token, "/api/mobile/notes/$id").patch(body).build()
+      executeJson<NoteEnvelope>(req).note
+    }
+
+  suspend fun deleteNote(serverUrl: String, token: String, id: String) =
+    withContext(Dispatchers.IO) {
+      val req = authBuilder(serverUrl, token, "/api/mobile/notes/$id").delete().build()
+      executeUnit(req)
+    }
+
   private fun authBuilder(serverUrl: String, token: String, path: String): Request.Builder {
     val cleanBase = serverUrl.trim().trimEnd('/')
     return Request.Builder()

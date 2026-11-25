@@ -25,6 +25,12 @@ class SessionStore(private val context: Context) {
     private val KEY_DUE_REVIEW = intPreferencesKey("due_review_count")
     private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
     private val KEY_SHOW_LESSONS = booleanPreferencesKey("show_lessons")
+    private val KEY_NOTIF_MORNING_ENABLED = booleanPreferencesKey("notif_morning_enabled")
+    private val KEY_NOTIF_MORNING_HOUR = intPreferencesKey("notif_morning_hour")
+    private val KEY_NOTIF_MORNING_MIN = intPreferencesKey("notif_morning_min")
+    private val KEY_NOTIF_EVENING_ENABLED = booleanPreferencesKey("notif_evening_enabled")
+    private val KEY_NOTIF_EVENING_HOUR = intPreferencesKey("notif_evening_hour")
+    private val KEY_NOTIF_EVENING_MIN = intPreferencesKey("notif_evening_min")
   }
 
   val sessionFlow: Flow<AuthSession> = context.sessionDataStore.data.map { p ->
@@ -39,6 +45,12 @@ class SessionStore(private val context: Context) {
       dueReviewCount = p[KEY_DUE_REVIEW] ?: 0,
       themeMode = p[KEY_THEME_MODE] ?: "system",
       showLessons = p[KEY_SHOW_LESSONS] ?: false,
+      notifMorningEnabled = p[KEY_NOTIF_MORNING_ENABLED] ?: true,
+      notifMorningHour = p[KEY_NOTIF_MORNING_HOUR] ?: 8,
+      notifMorningMinute = p[KEY_NOTIF_MORNING_MIN] ?: 0,
+      notifEveningEnabled = p[KEY_NOTIF_EVENING_ENABLED] ?: true,
+      notifEveningHour = p[KEY_NOTIF_EVENING_HOUR] ?: 20,
+      notifEveningMinute = p[KEY_NOTIF_EVENING_MIN] ?: 0,
     )
   }
 
@@ -77,15 +89,45 @@ class SessionStore(private val context: Context) {
     }
   }
 
+  suspend fun saveNotificationPrefs(
+    morningEnabled: Boolean,
+    morningHour: Int,
+    morningMinute: Int,
+    eveningEnabled: Boolean,
+    eveningHour: Int,
+    eveningMinute: Int,
+  ) {
+    context.sessionDataStore.edit { p ->
+      p[KEY_NOTIF_MORNING_ENABLED] = morningEnabled
+      p[KEY_NOTIF_MORNING_HOUR] = morningHour
+      p[KEY_NOTIF_MORNING_MIN] = morningMinute
+      p[KEY_NOTIF_EVENING_ENABLED] = eveningEnabled
+      p[KEY_NOTIF_EVENING_HOUR] = eveningHour
+      p[KEY_NOTIF_EVENING_MIN] = eveningMinute
+    }
+  }
+
   suspend fun clearAuth() {
     context.sessionDataStore.edit { p ->
       val savedUrl = p[KEY_SERVER_URL].orEmpty()
       val savedTheme = p[KEY_THEME_MODE] ?: "system"
       val savedShowLessons = p[KEY_SHOW_LESSONS] ?: false
+      val mEn = p[KEY_NOTIF_MORNING_ENABLED] ?: true
+      val mH = p[KEY_NOTIF_MORNING_HOUR] ?: 8
+      val mM = p[KEY_NOTIF_MORNING_MIN] ?: 0
+      val eEn = p[KEY_NOTIF_EVENING_ENABLED] ?: true
+      val eH = p[KEY_NOTIF_EVENING_HOUR] ?: 20
+      val eM = p[KEY_NOTIF_EVENING_MIN] ?: 0
       p.clear()
       if (savedUrl.isNotBlank()) p[KEY_SERVER_URL] = savedUrl
       p[KEY_THEME_MODE] = savedTheme
       p[KEY_SHOW_LESSONS] = savedShowLessons
+      p[KEY_NOTIF_MORNING_ENABLED] = mEn
+      p[KEY_NOTIF_MORNING_HOUR] = mH
+      p[KEY_NOTIF_MORNING_MIN] = mM
+      p[KEY_NOTIF_EVENING_ENABLED] = eEn
+      p[KEY_NOTIF_EVENING_HOUR] = eH
+      p[KEY_NOTIF_EVENING_MIN] = eM
     }
   }
 }

@@ -8,12 +8,12 @@ import androidx.core.database.sqlite.transaction
 
 /**
  * Local SQLite database powering full offline mode, SRS flashcards, Calendar,
- * and the home-screen Deadlines widget.
+ * Notes, Lectures, local notifications, and the home-screen Deadlines widget.
  */
 class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
   companion object {
     private const val DB_NAME = "studyhub_offline.db"
-    private const val DB_VERSION = 2
+    private const val DB_VERSION = 3
   }
 
   override fun onCreate(db: SQLiteDatabase) {
@@ -96,11 +96,15 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       """.trimIndent(),
     )
     createV2Tables(db)
+    createV3Tables(db)
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
     if (oldVersion < 2) {
       createV2Tables(db)
+    }
+    if (oldVersion < 3) {
+      createV3Tables(db)
     }
   }
 
@@ -146,6 +150,39 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       """.trimIndent(),
     )
     db.execSQL("CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject_id)")
+  }
+
+  private fun createV3Tables(db: SQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS notes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        subject_id TEXT,
+        color TEXT NOT NULL,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+      """.trimIndent(),
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_notes_subject ON notes(subject_id)")
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS lectures (
+        id TEXT PRIMARY KEY,
+        subject_id TEXT NOT NULL,
+        number INTEGER,
+        title TEXT NOT NULL,
+        date TEXT,
+        summary TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+      """.trimIndent(),
+    )
+    db.execSQL("CREATE INDEX IF NOT EXISTS idx_lectures_subject ON lectures(subject_id)")
   }
 
   @Synchronized
@@ -255,6 +292,44 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       }
     }
 
+    val notes = mutableListOf<NoteDto>()
+    db.rawQuery(
+      "SELECT id, title, content, subject_id, color, pinned, created_at, updated_at FROM notes ORDER BY pinned DESC, updated_at DESC",
+      null,
+    ).use { c ->
+      while (c.moveToNext()) {
+        notes += NoteDto(
+          id = c.getString(0),
+          title = c.getString(1),
+          content = c.getString(2),
+          subjectId = c.getString(3),
+          color = c.getString(4),
+          pinned = c.getInt(5) == 1,
+          createdAt = c.getString(6),
+          updatedAt = c.getString(7),
+        )
+      }
+    }
+
+    val lectures = mutableListOf<LectureDto>()
+    db.rawQuery(
+      "SELECT id, subject_id, number, title, date, summary, created_at, updated_at FROM lectures ORDER BY number DESC, date DESC, updated_at DESC",
+      null,
+    ).use { c ->
+      while (c.moveToNext()) {
+        lectures += LectureDto(
+          id = c.getString(0),
+          subjectId = c.getString(1),
+          number = if (c.isNull(2)) null else c.getInt(2),
+          title = c.getString(3),
+          date = c.getString(4),
+          summary = c.getString(5),
+          createdAt = c.getString(6),
+          updatedAt = c.getString(7),
+        )
+      }
+    }
+
     var pendingCount = 0
     db.rawQuery("SELECT COUNT(*) FROM pending_ops", null).use { c ->
       if (c.moveToFirst()) pendingCount = c.getInt(0)
@@ -266,6 +341,8 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       todayEvents = events,
       calendarEvents = calendarEvents,
       questions = questions,
+      notes = notes,
+      lectures = lectures,
       pendingOpsCount = pendingCount,
     )
   }
@@ -302,6 +379,8 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
     todayEvents: List<TodayEventDto>,
     calendarEvents: List<TodayEventDto>,
     questions: List<QuestionDto>,
+    notes: List<NoteDto>,
+    lectures: List<LectureDto>,
   ) {
     writableDatabase.transaction {
       delete("subjects", null, null)
@@ -339,6 +418,16 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       for (q in questions) {
         insertQuestionRow(this, q)
       }
+
+      delete("notes", null, null)
+      for (n in notes) {
+        insertNoteRow(this, n)
+      }
+
+      delete("lectures", null, null)
+      for (l in lectures) {
+        insertLectureRow(this, l)
+      }
     }
   }
 
@@ -369,6 +458,27 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
   fun upsertQuestion(q: QuestionDto) {
     writableDatabase.transaction {
       insertQuestionRow(this, q)
+    }
+  }
+
+  @Synchronized
+  fun upsertNote(note: NoteDto) {
+    writableDatabase.transaction {
+      insertNoteRow(this, note)
+    }
+  }
+
+  @Synchronized
+  fun deleteNoteLocal(noteId: String) {
+    writableDatabase.delete("notes", "id = ?", arrayOf(noteId))
+  }
+
+  @Synchronized
+  fun remapNoteId(oldId: String, serverNote: NoteDto) {
+    writableDatabase.transaction {
+      delete("notes", "id = ?", arrayOf(oldId))
+      insertNoteRow(this, serverNote)
+      execSQL("UPDATE pending_ops SET entity_id = ? WHERE entity_id = ?", arrayOf(serverNote.id, oldId))
     }
   }
 
@@ -473,6 +583,8 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
       delete("today_events", null, null)
       delete("calendar_events", null, null)
       delete("questions", null, null)
+      delete("notes", null, null)
+      delete("lectures", null, null)
       delete("pending_ops", null, null)
     }
   }
@@ -541,6 +653,42 @@ class StudyHubDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         put("srs_reps", q.srsReps)
         put("srs_lapses", q.srsLapses)
         put("sort_order", q.sortOrder)
+      },
+      SQLiteDatabase.CONFLICT_REPLACE,
+    )
+  }
+
+  private fun insertNoteRow(db: SQLiteDatabase, n: NoteDto) {
+    db.insertWithOnConflict(
+      "notes",
+      null,
+      ContentValues().apply {
+        put("id", n.id)
+        put("title", n.title)
+        put("content", n.content)
+        put("subject_id", n.subjectId)
+        put("color", n.color)
+        put("pinned", if (n.pinned) 1 else 0)
+        put("created_at", n.createdAt)
+        put("updated_at", n.updatedAt)
+      },
+      SQLiteDatabase.CONFLICT_REPLACE,
+    )
+  }
+
+  private fun insertLectureRow(db: SQLiteDatabase, l: LectureDto) {
+    db.insertWithOnConflict(
+      "lectures",
+      null,
+      ContentValues().apply {
+        put("id", l.id)
+        put("subject_id", l.subjectId)
+        if (l.number != null) put("number", l.number) else putNull("number")
+        put("title", l.title)
+        put("date", l.date)
+        put("summary", l.summary)
+        put("created_at", l.createdAt)
+        put("updated_at", l.updatedAt)
       },
       SQLiteDatabase.CONFLICT_REPLACE,
     )

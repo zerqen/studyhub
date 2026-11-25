@@ -89,6 +89,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     viewModelScope.launch { repo.reviewQuestion(questionId, grade) }
   }
 
+  fun createNote(
+    title: String,
+    content: String,
+    subjectId: String?,
+    color: String,
+    pinned: Boolean,
+  ) {
+    viewModelScope.launch { repo.createNote(title, content, subjectId, color, pinned) }
+  }
+
+  fun updateNote(
+    noteId: String,
+    title: String,
+    content: String,
+    subjectId: String?,
+    color: String,
+    pinned: Boolean,
+  ) {
+    viewModelScope.launch { repo.updateNote(noteId, title, content, subjectId, color, pinned) }
+  }
+
+  fun toggleNotePinned(noteId: String) {
+    viewModelScope.launch { repo.toggleNotePinned(noteId) }
+  }
+
+  fun deleteNote(noteId: String) {
+    viewModelScope.launch { repo.deleteNote(noteId) }
+  }
+
+  fun updateNotificationPrefs(
+    morningEnabled: Boolean,
+    morningHour: Int,
+    morningMinute: Int,
+    eveningEnabled: Boolean,
+    eveningHour: Int,
+    eveningMinute: Int,
+  ) {
+    viewModelScope.launch {
+      repo.updateNotificationPrefs(
+        morningEnabled,
+        morningHour,
+        morningMinute,
+        eveningEnabled,
+        eveningHour,
+        eveningMinute,
+      )
+    }
+  }
+
+  fun sendTestNotification() {
+    viewModelScope.launch { repo.sendTestNotification() }
+  }
+
   fun toggleTaskDone(taskId: String) {
     viewModelScope.launch { repo.toggleTaskDone(taskId) }
   }
