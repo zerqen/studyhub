@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">StudyHub</string>
+    <string name="widget_deadlines_name">Дедлайны StudyHub</string>
+    <string name="widget_deadlines_desc">Ближайшие задачи, домашка и просроченные сроки</string>
+</resources>
