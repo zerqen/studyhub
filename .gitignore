@@ -27,3 +27,8 @@ android/*.iml
 android/app/*.iml
 android/keystore.properties
 android/*.jks
+
+desktop/node_modules/
+desktop/dist/
+desktop/dist-electron/
+desktop/release/

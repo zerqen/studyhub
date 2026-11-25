@@ -1,0 +1,114 @@
+@import "katex/dist/katex.min.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 243 241 236;
+  --surface: 255 254 251;
+  --subtle: 240 237 230;
+  --line: 222 218 208;
+  --fg: 29 33 48;
+  --muted: 87 91 106;
+  --accent: 45 91 210;
+  --accent-fg: 255 255 255;
+  --accent-soft: 232 238 252;
+  --success: 37 100 69;
+  --warning: 180 95 6;
+  --danger: 185 28 28;
+  --urgent: 143 53 16;
+  --urgent-soft: 251 227 207;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 13 13 18;
+  --surface: 22 22 29;
+  --subtle: 32 32 41;
+  --line: 44 44 56;
+  --fg: 236 236 241;
+  --muted: 150 151 166;
+  --accent: 129 120 255;
+  --accent-fg: 255 255 255;
+  --accent-soft: 37 35 70;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --urgent: 251 146 60;
+  --urgent-soft: 67 32 12;
+  color-scheme: dark;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-fg antialiased;
+    min-height: 100vh;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    @apply bg-accent/20;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .heading {
+    @apply font-serif font-bold tracking-normal;
+  }
+}
+
+.prose-note {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-note p {
+  margin: 0.45rem 0;
+}
+.prose-note h1,
+.prose-note h2,
+.prose-note h3 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  margin: 0.9rem 0 0.4rem;
+}
+.prose-note ul,
+.prose-note ol {
+  margin: 0.45rem 0;
+  padding-left: 1.35rem;
+}
+.prose-note li {
+  margin: 0.2rem 0;
+}
+.prose-note code {
+  border-radius: 6px;
+  background: rgb(var(--subtle));
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9em;
+}
+.prose-note pre {
+  overflow-x: auto;
+  border-radius: 10px;
+  background: rgb(var(--subtle));
+  padding: 0.75rem 1rem;
+}
+.prose-note pre code {
+  background: transparent;
+  padding: 0;
+}
+.prose-note .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.3rem 0;
+}
+.prose-note table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-note th,
+.prose-note td {
+  @apply border border-line px-2 py-1 text-left;
+}
+.prose-note blockquote {
+  @apply border-l-2 border-accent/60 pl-3 text-muted;
+}

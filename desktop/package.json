@@ -1,0 +1,72 @@
+{
+  "name": "studyhub-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StudyHub native offline-first Windows desktop app",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "build:electron": "node scripts/build-electron.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run build:electron && npm run build:renderer",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "pack:win": "npm run build:electron && npm run build:renderer && npx electron-builder --win nsis portable"
+  },
+  "dependencies": {
+    "katex": "^0.16.22",
+    "lucide-react": "^0.544.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.6",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.2",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "ru.studyhub.desktop",
+    "productName": "StudyHub",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-Setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "StudyHub"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
+    }
+  }
+}
